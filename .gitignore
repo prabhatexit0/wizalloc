@@ -1,6 +1,5 @@
 # Rust
 wasm-engine/target/
-wasm-engine/pkg/
 
 # Node
 frontend/node_modules/
