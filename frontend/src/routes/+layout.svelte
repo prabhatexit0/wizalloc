@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	let { children } = $props();
+	let currentPath = $derived(page.url.pathname);
 </script>
 
 <svelte:head>
@@ -13,8 +15,8 @@
 			<span class="brand">wizalloc</span>
 		</div>
 		<nav>
-			<a href="/" class="nav-item active">Linked List</a>
-			<span class="nav-item disabled">SkipList</span>
+			<a href="/" class="nav-item" class:active={currentPath === '/'}>Linked List</a>
+			<a href="/storage" class="nav-item" class:active={currentPath === '/storage'}>Storage Engine</a>
 			<span class="nav-item disabled">B-Tree</span>
 			<span class="nav-item disabled">LSM Tree</span>
 		</nav>
