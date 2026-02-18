@@ -1,0 +1,11 @@
+# Rust
+wasm-engine/target/
+wasm-engine/pkg/
+
+# Node
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+
+# OS
+.DS_Store
