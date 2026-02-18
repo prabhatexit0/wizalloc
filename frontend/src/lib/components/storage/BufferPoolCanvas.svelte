@@ -3,7 +3,7 @@
 
 	let canvas: HTMLCanvasElement;
 	let width = $state(0);
-	let height = $state(0);
+	let viewportHeight = $state(0);
 	let container: HTMLDivElement;
 
 	const MONO = "'SF Mono','Cascadia Code','Fira Code',Consolas,monospace";
@@ -13,6 +13,15 @@
 	const HEADER_H = 24;
 	const STATS_H = 36;
 	const PAD = 12;
+
+	let canvasHeight = $derived.by(() => {
+		const snap = storageState.bpSnapshot;
+		if (!snap || width === 0) return viewportHeight;
+		const cols = Math.max(1, Math.floor((width - PAD * 2 + FRAME_GAP) / (FRAME_W + FRAME_GAP)));
+		const rows = Math.ceil(snap.frames.length / cols);
+		const contentH = HEADER_H + PAD + rows * (FRAME_H + FRAME_GAP) + STATS_H + PAD;
+		return Math.max(viewportHeight, contentH);
+	});
 
 	let rafId = 0;
 	function scheduleRender() {
@@ -25,7 +34,7 @@
 		const ro = new ResizeObserver((entries) => {
 			const r = entries[0].contentRect;
 			width = r.width;
-			height = r.height;
+			viewportHeight = r.height;
 			scheduleRender();
 		});
 		ro.observe(container);
@@ -33,27 +42,28 @@
 	});
 
 	$effect(() => {
-		// Re-render when snapshot changes
 		storageState.bpSnapshot;
 		storageState.selectedPageId;
+		canvasHeight;
 		scheduleRender();
 	});
 
 	function render() {
 		if (!canvas || width === 0) return;
 		const dpr = window.devicePixelRatio || 1;
+		const h = canvasHeight;
 		canvas.width = width * dpr;
-		canvas.height = height * dpr;
+		canvas.height = h * dpr;
 		const ctx = canvas.getContext('2d')!;
 		ctx.scale(dpr, dpr);
-		ctx.clearRect(0, 0, width, height);
+		ctx.clearRect(0, 0, width, h);
 
 		const snap = storageState.bpSnapshot;
 		if (!snap) {
 			ctx.fillStyle = 'rgba(255,255,255,0.3)';
 			ctx.font = `12px ${MONO}`;
 			ctx.textAlign = 'center';
-			ctx.fillText('Initialize engine to see buffer pool', width / 2, height / 2);
+			ctx.fillText('Initialize engine to see buffer pool', width / 2, viewportHeight / 2);
 			return;
 		}
 
@@ -145,8 +155,8 @@
 			}
 		}
 
-		// Stats at bottom
-		const statsY = height - STATS_H;
+		// Stats at bottom of content
+		const statsY = h - STATS_H;
 		ctx.fillStyle = 'rgba(255,255,255,0.04)';
 		ctx.fillRect(0, statsY, width, STATS_H);
 
@@ -191,16 +201,17 @@
 	}
 </script>
 
-<div class="canvas-wrap" bind:this={container}>
-	<canvas bind:this={canvas} style="width:{width}px;height:{height}px" onclick={handleClick}></canvas>
+<div class="canvas-viewport" bind:this={container}>
+	<canvas bind:this={canvas} style="width:{width}px;height:{canvasHeight}px" onclick={handleClick}></canvas>
 </div>
 
 <style>
-	.canvas-wrap {
+	.canvas-viewport {
 		width: 100%;
 		height: 100%;
 		min-height: 0;
-		position: relative;
+		overflow-y: auto;
+		overflow-x: hidden;
 	}
 	canvas {
 		display: block;

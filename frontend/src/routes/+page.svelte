@@ -1,88 +1,139 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { createLinkedListStore } from '$lib/stores/linkedlist.svelte.js';
-	import LinkedListCanvas from '$lib/components/LinkedListCanvas.svelte';
-	import ArenaCanvas from '$lib/components/ArenaCanvas.svelte';
-	import ControlPanel from '$lib/components/ControlPanel.svelte';
+	import { storageState } from '$lib/stores/storage.svelte.js';
+	import { layoutState } from '$lib/stores/layout.svelte.js';
+	import StorageControlPanel from '$lib/components/storage/StorageControlPanel.svelte';
+	import BufferPoolCanvas from '$lib/components/storage/BufferPoolCanvas.svelte';
+	import DiskCanvas from '$lib/components/storage/DiskCanvas.svelte';
+	import PageInspectorCanvas from '$lib/components/storage/PageInspectorCanvas.svelte';
+	import PaneDivider from '$lib/components/PaneDivider.svelte';
+	import PaneHeader from '$lib/components/PaneHeader.svelte';
 
-	const store = createLinkedListStore();
+	let loading = $state(true);
+	let isMobile = $state(false);
+	let vizContainer = $state<HTMLDivElement>(undefined!);
+	let topRowEl = $state<HTMLDivElement>(undefined!);
+	let vizHeight = $state(0);
+	let topRowWidth = $state(0);
 
-	onMount(async () => {
-		await store.initialize();
-		return () => store.destroy();
+	onMount(() => {
+		storageState.initWasm().then(() => { loading = false; });
+
+		const mql = window.matchMedia('(max-width: 768px)');
+		isMobile = mql.matches;
+		const handler = (e: MediaQueryListEvent) => { isMobile = e.matches; };
+		mql.addEventListener('change', handler);
+
+		return () => mql.removeEventListener('change', handler);
 	});
+
+	$effect(() => {
+		if (!vizContainer) return;
+		const ro = new ResizeObserver((entries) => {
+			vizHeight = entries[0].contentRect.height;
+		});
+		ro.observe(vizContainer);
+		return () => ro.disconnect();
+	});
+
+	$effect(() => {
+		if (!topRowEl) return;
+		const ro = new ResizeObserver((entries) => {
+			topRowWidth = entries[0].contentRect.width;
+		});
+		ro.observe(topRowEl);
+		return () => ro.disconnect();
+	});
+
+	function handleHorizontalResize(delta: number) {
+		if (vizHeight === 0) return;
+		layoutState.setTopBottomRatio(layoutState.topBottomRatio + delta / vizHeight);
+	}
+
+	function handleVerticalResize(delta: number) {
+		if (topRowWidth === 0) return;
+		layoutState.setLeftRightRatio(layoutState.leftRightRatio + delta / topRowWidth);
+	}
+
+	// Compute flex styles for panes
+	let topRowFlex = $derived(
+		layoutState.inspectorCollapsed
+			? '1 1 0%'
+			: `${layoutState.topBottomRatio} 1 0%`
+	);
+	let bottomRowFlex = $derived(
+		layoutState.inspectorCollapsed
+			? '0 0 24px'
+			: `${1 - layoutState.topBottomRatio} 1 0%`
+	);
+	let bpFlex = $derived(
+		layoutState.diskCollapsed
+			? '1 1 0%'
+			: `${layoutState.leftRightRatio} 1 0%`
+	);
+	let diskFlex = $derived(
+		layoutState.bufferPoolCollapsed
+			? '1 1 0%'
+			: `${1 - layoutState.leftRightRatio} 1 0%`
+	);
 </script>
 
-{#if !store.ready}
+<svelte:head>
+	<title>wizalloc - Storage Engine</title>
+</svelte:head>
+
+{#if loading}
 	<div class="loading">
 		<div class="spinner"></div>
-		<span>loading wasm engine…</span>
+		<span>Loading WASM...</span>
 	</div>
 {:else}
-	<div class="page">
-		<div class="page-header">
-			<div class="page-title">
-				<span class="label">Linked List</span>
-				<span class="sub">O(n) sequential access</span>
+	<div class="layout">
+		<aside class="sidebar">
+			<StorageControlPanel />
+		</aside>
+		<div class="visualizations" bind:this={vizContainer}>
+			<div class="viz-row top" bind:this={topRowEl} style="flex:{topRowFlex}">
+				{#if layoutState.bufferPoolCollapsed}
+					<div class="viz-panel collapsed-h">
+						<PaneHeader title="Buffer Pool" collapsed={true} onToggle={layoutState.toggleBufferPool} vertical={true} />
+					</div>
+				{:else}
+					<div class="viz-panel" style="flex:{bpFlex}">
+						<PaneHeader title="Buffer Pool" collapsed={false} onToggle={layoutState.toggleBufferPool} />
+						<div class="pane-content">
+							<BufferPoolCanvas />
+						</div>
+					</div>
+				{/if}
+				{#if !isMobile && !layoutState.bufferPoolCollapsed && !layoutState.diskCollapsed}
+					<PaneDivider orientation="vertical" onResize={handleVerticalResize} />
+				{/if}
+				{#if layoutState.diskCollapsed}
+					<div class="viz-panel collapsed-h">
+						<PaneHeader title="Disk" collapsed={true} onToggle={layoutState.toggleDisk} vertical={true} />
+					</div>
+				{:else}
+					<div class="viz-panel" style="flex:{diskFlex}">
+						<PaneHeader title="Disk" collapsed={false} onToggle={layoutState.toggleDisk} />
+						<div class="pane-content">
+							<DiskCanvas />
+						</div>
+					</div>
+				{/if}
 			</div>
-			<div class="legend">
-				<span class="legend-item"><span class="dot" style="background: rgba(250, 204, 21, 0.5)"></span>visiting</span>
-				<span class="legend-item"><span class="dot" style="background: rgba(74, 222, 128, 0.5)"></span>inserted</span>
-				<span class="legend-item"><span class="dot" style="background: rgba(248, 113, 113, 0.5)"></span>deleted</span>
-				<span class="legend-item"><span class="dot" style="background: rgba(96, 165, 250, 0.6)"></span>found</span>
-				<span class="legend-item"><span class="dot" style="background: rgba(168, 85, 247, 0.5)"></span>selected</span>
-			</div>
-		</div>
-
-		<ControlPanel
-			onPushFront={store.pushFront}
-			onInsertSorted={store.insertSorted}
-			onDelete={store.deleteValue}
-			onSearch={store.searchValue}
-			onSort={store.sortList}
-			onClear={store.clear}
-			onGenerate={store.generateRandom}
-			onSpeedChange={store.setAnimationSpeed}
-			onClearSelection={() => store.selectNode(null)}
-			lastOp={store.lastOp}
-			nodeCount={store.snapshot.length}
-			animating={store.animating}
-			animationSpeed={store.animationSpeed}
-			selectedValue={store.selectedIndex !== null && store.selectedIndex < store.snapshot.allSlots.length
-				? (store.snapshot.allSlots[store.selectedIndex]?.alive ? store.snapshot.allSlots[store.selectedIndex].value : null)
-				: null}
-		/>
-
-		<div class="viz-container">
-			<div class="viz-panel">
-				<div class="section-header">
-					<span class="section-label">Data Structure</span>
-					<span class="section-hint">logical view — click a node to locate in memory</span>
+			{#if !isMobile && !layoutState.inspectorCollapsed}
+				<PaneDivider orientation="horizontal" onResize={handleHorizontalResize} />
+			{/if}
+			<div class="viz-row bottom" style="flex:{bottomRowFlex}">
+				<div class="viz-panel wide">
+					<PaneHeader title="Page Inspector" collapsed={layoutState.inspectorCollapsed} onToggle={layoutState.toggleInspector} />
+					{#if !layoutState.inspectorCollapsed}
+						<div class="pane-content">
+							<PageInspectorCanvas />
+						</div>
+					{/if}
 				</div>
-				<LinkedListCanvas
-					snapshot={store.snapshot}
-					animatingSteps={store.animatingSteps}
-					activeStepIndex={store.activeStepIndex}
-					selectedIndex={store.selectedIndex}
-					onSelectIndex={store.selectNode}
-				/>
-			</div>
-
-			<div class="divider"></div>
-
-			<div class="viz-panel">
-				<div class="section-header">
-					<span class="section-label">Memory Layout</span>
-					<span class="section-hint">arena allocation — real WASM linear memory addresses</span>
-				</div>
-				<ArenaCanvas
-					snapshot={store.snapshot}
-					animatingSteps={store.animatingSteps}
-					activeStepIndex={store.activeStepIndex}
-					selectedIndex={store.selectedIndex}
-					onSelectIndex={store.selectNode}
-					blinking={store.blinking}
-				/>
 			</div>
 		</div>
 	</div>
@@ -93,137 +144,83 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 10px;
-		flex: 1;
-		color: rgba(255, 255, 255, 0.4);
+		gap: 12px;
+		height: 100%;
+		color: rgba(255, 255, 255, 0.5);
 		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-		font-size: 12px;
+		font-size: 13px;
 	}
 	.spinner {
-		width: 14px;
-		height: 14px;
-		border: 1.5px solid rgba(255, 255, 255, 0.1);
+		width: 16px;
+		height: 16px;
+		border: 2px solid rgba(255, 255, 255, 0.1);
 		border-top-color: #007acc;
 		border-radius: 50%;
-		animation: spin 0.7s linear infinite;
+		animation: spin 0.8s linear infinite;
 	}
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-	.page {
+	@keyframes spin { to { transform: rotate(360deg); } }
+
+	.layout {
 		display: flex;
-		flex-direction: column;
-		flex: 1;
+		height: 100%;
 		min-height: 0;
 	}
-	.page-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px;
-		padding: 8px 16px;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+	.sidebar {
+		width: 300px;
+		min-width: 260px;
+		max-width: 340px;
+		border-right: 1px solid rgba(255, 255, 255, 0.06);
+		overflow-y: auto;
 		flex-shrink: 0;
 	}
-	.page-title {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-	}
-	.label {
-		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-		font-size: 12px;
-		font-weight: 500;
-		color: rgba(255, 255, 255, 0.6);
-	}
-	.sub {
-		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-		font-size: 11px;
-		color: rgba(255, 255, 255, 0.25);
-	}
-	.legend {
-		display: flex;
-		gap: 12px;
-	}
-	.legend-item {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-		font-size: 10px;
-		color: rgba(255, 255, 255, 0.3);
-	}
-	.dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		display: inline-block;
-	}
-
-	.viz-container {
+	.visualizations {
+		flex: 1;
+		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		flex: 1;
+	}
+	.viz-row {
+		display: flex;
 		min-height: 0;
 	}
-
 	.viz-panel {
+		min-width: 0;
+		min-height: 0;
+		position: relative;
 		display: flex;
 		flex-direction: column;
+		overflow: hidden;
+	}
+	.viz-panel.collapsed-h {
+		flex: 0 0 24px;
+		flex-direction: row;
+	}
+	.viz-panel.wide {
+		flex: 1;
+	}
+	.pane-content {
 		flex: 1;
 		min-height: 0;
+		min-width: 0;
 	}
 
-	.section-header {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 4px 16px;
-		flex-shrink: 0;
-	}
-
-	.section-label {
-		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-		font-size: 10px;
-		font-weight: 600;
-		color: rgba(255, 255, 255, 0.45);
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
-	}
-
-	.section-hint {
-		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-		font-size: 10px;
-		color: rgba(255, 255, 255, 0.18);
-	}
-
-	.divider {
-		height: 1px;
-		background: rgba(255, 255, 255, 0.06);
-		flex-shrink: 0;
-	}
-
-	@media (max-width: 640px) {
-		.page-header {
+	@media (max-width: 768px) {
+		.layout {
 			flex-direction: column;
-			align-items: flex-start;
-			gap: 4px;
-			padding: 6px 12px;
 		}
-		.page-title {
-			gap: 6px;
+		.sidebar {
+			width: 100%;
+			max-width: none;
+			max-height: 40vh;
+			border-right: none;
+			border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 		}
-		.legend {
-			gap: 10px;
+		.viz-row.top {
+			flex-direction: column;
 		}
-		.sub {
-			display: none;
-		}
-		.section-header {
-			padding: 3px 12px;
-		}
-		.section-hint {
-			display: none;
+		.viz-panel {
+			flex: 1 1 0% !important;
+			min-height: 150px;
 		}
 	}
 </style>

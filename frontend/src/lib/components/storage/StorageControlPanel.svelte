@@ -15,6 +15,18 @@
 		{ name: 'name', type: 'VarChar', nullable: false, maxLen: 255 },
 	]);
 
+	// ── Quick Fill form ──
+	let qfTableName = $state('users');
+	let qfColumns: { name: string; type: string; maxLen: number; nullable: boolean }[] = $state([
+		{ name: 'id', type: 'Int32', nullable: false, maxLen: 255 },
+		{ name: 'name', type: 'VarChar', nullable: false, maxLen: 32 },
+		{ name: 'email', type: 'VarChar', nullable: false, maxLen: 64 },
+		{ name: 'age', type: 'UInt32', nullable: false, maxLen: 255 },
+		{ name: 'active', type: 'Bool', nullable: false, maxLen: 255 },
+	]);
+	let qfRowCount = $state(100);
+	const ROW_PRESETS = [10, 50, 100, 500];
+
 	// ── Insert form ──
 	let insertValues = $state('');
 
@@ -39,6 +51,25 @@
 
 	function removeColumn(i: number) {
 		newColumns = newColumns.filter((_, idx) => idx !== i);
+	}
+
+	function addQfColumn() {
+		qfColumns = [...qfColumns, { name: '', type: 'Int32', nullable: false, maxLen: 255 }];
+	}
+
+	function removeQfColumn(i: number) {
+		qfColumns = qfColumns.filter((_, idx) => idx !== i);
+	}
+
+	function doQuickFill() {
+		if (!qfTableName.trim()) return;
+		const columns: ColumnDef[] = qfColumns.map((c) => {
+			let type_: string | { VarChar: number } | { Blob: number } = c.type;
+			if (c.type === 'VarChar') type_ = { VarChar: c.maxLen };
+			if (c.type === 'Blob') type_ = { Blob: c.maxLen };
+			return { name: c.name, type: type_, nullable: c.nullable };
+		});
+		storageState.bootstrapTable(qfTableName.trim(), columns, qfRowCount);
 	}
 
 	function createTable() {
@@ -122,6 +153,53 @@
 			<span>Pool: {storageState.config?.pool_size} frames</span>
 			<span>Disk: {storageState.config?.disk_capacity} pages</span>
 			<button class="btn small danger" onclick={() => storageState.resetEngine()}>Reset</button>
+		</div>
+
+		<!-- Quick Fill -->
+		<div class="section">
+			<h3>Quick Fill</h3>
+			<input type="text" bind:value={qfTableName} placeholder="Table name" class="text-input" />
+			<div class="columns-list">
+				{#each qfColumns as col, i}
+					<div class="col-row">
+						<input type="text" bind:value={col.name} placeholder="col name" class="col-name" />
+						<select bind:value={col.type}>
+							<option value="Int32">Int32</option>
+							<option value="UInt32">UInt32</option>
+							<option value="Float64">Float64</option>
+							<option value="Bool">Bool</option>
+							<option value="VarChar">VarChar</option>
+							<option value="Blob">Blob</option>
+						</select>
+						{#if col.type === 'VarChar' || col.type === 'Blob'}
+							<input type="number" bind:value={col.maxLen} min="1" max="65535" class="max-len" />
+						{/if}
+						<label class="nullable-check">
+							<input type="checkbox" bind:checked={col.nullable} />
+							<span>null</span>
+						</label>
+						<button class="btn-icon" onclick={() => removeQfColumn(i)} title="Remove column">&times;</button>
+					</div>
+				{/each}
+			</div>
+			<div class="btn-row">
+				<button class="btn small" onclick={addQfColumn}>+ Column</button>
+			</div>
+
+			<span class="field-label">Row Count</span>
+			<div class="presets">
+				{#each ROW_PRESETS as preset}
+					<button
+						class="preset-btn"
+						class:active={qfRowCount === preset}
+						onclick={() => (qfRowCount = preset)}
+					>
+						{preset}
+					</button>
+				{/each}
+			</div>
+
+			<button class="btn primary" onclick={doQuickFill} disabled={!qfTableName.trim()}>Create &amp; Fill</button>
 		</div>
 
 		<!-- Create Table -->

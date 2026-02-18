@@ -4,7 +4,7 @@
 
 	let canvas: HTMLCanvasElement;
 	let width = $state(0);
-	let height = $state(0);
+	let viewportHeight = $state(0);
 	let container: HTMLDivElement;
 
 	const MONO = "'SF Mono','Cascadia Code','Fira Code',Consolas,monospace";
@@ -13,6 +13,15 @@
 	const GAP = 3;
 	const PAD = 12;
 	const HEADER_H = 24;
+
+	let canvasHeight = $derived.by(() => {
+		const disk = storageState.diskSnapshot;
+		if (!disk || width === 0) return viewportHeight;
+		const cols = Math.max(1, Math.floor((width - PAD * 2 + GAP) / (CELL_W + GAP)));
+		const rows = Math.ceil(disk.maxPages / cols);
+		const contentH = HEADER_H + PAD + rows * (CELL_H + GAP) + PAD;
+		return Math.max(viewportHeight, contentH);
+	});
 
 	let rafId = 0;
 	function scheduleRender() {
@@ -25,7 +34,7 @@
 		const ro = new ResizeObserver((entries) => {
 			const r = entries[0].contentRect;
 			width = r.width;
-			height = r.height;
+			viewportHeight = r.height;
 			scheduleRender();
 		});
 		ro.observe(container);
@@ -36,24 +45,26 @@
 		storageState.diskSnapshot;
 		storageState.bpSnapshot;
 		storageState.selectedPageId;
+		canvasHeight;
 		scheduleRender();
 	});
 
 	function render() {
 		if (!canvas || width === 0) return;
 		const dpr = window.devicePixelRatio || 1;
+		const h = canvasHeight;
 		canvas.width = width * dpr;
-		canvas.height = height * dpr;
+		canvas.height = h * dpr;
 		const ctx = canvas.getContext('2d')!;
 		ctx.scale(dpr, dpr);
-		ctx.clearRect(0, 0, width, height);
+		ctx.clearRect(0, 0, width, h);
 
 		const disk = storageState.diskSnapshot;
 		if (!disk) {
 			ctx.fillStyle = 'rgba(255,255,255,0.3)';
 			ctx.font = `12px ${MONO}`;
 			ctx.textAlign = 'center';
-			ctx.fillText('Initialize engine to see disk', width / 2, height / 2);
+			ctx.fillText('Initialize engine to see disk', width / 2, viewportHeight / 2);
 			return;
 		}
 
@@ -82,8 +93,6 @@
 			const row = Math.floor(i / cols);
 			const x = PAD + col * (CELL_W + GAP);
 			const y = startY + row * (CELL_H + GAP);
-
-			if (y > height) break; // off-screen
 
 			let bg = 'rgba(255,255,255,0.02)';
 			let border = 'rgba(255,255,255,0.06)';
@@ -178,16 +187,17 @@
 	}
 </script>
 
-<div class="canvas-wrap" bind:this={container}>
-	<canvas bind:this={canvas} style="width:{width}px;height:{height}px" onclick={handleClick}></canvas>
+<div class="canvas-viewport" bind:this={container}>
+	<canvas bind:this={canvas} style="width:{width}px;height:{canvasHeight}px" onclick={handleClick}></canvas>
 </div>
 
 <style>
-	.canvas-wrap {
+	.canvas-viewport {
 		width: 100%;
 		height: 100%;
 		min-height: 0;
-		position: relative;
+		overflow-y: auto;
+		overflow-x: hidden;
 	}
 	canvas { display: block; cursor: pointer; }
 </style>

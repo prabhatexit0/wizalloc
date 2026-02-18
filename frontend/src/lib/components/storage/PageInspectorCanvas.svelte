@@ -4,7 +4,7 @@
 
 	let canvas: HTMLCanvasElement;
 	let width = $state(0);
-	let height = $state(0);
+	let viewportHeight = $state(0);
 	let container: HTMLDivElement;
 	let showHex = $state(false);
 
@@ -14,6 +14,19 @@
 	const BYTE_W = 18;
 	const BYTE_H = 16;
 	const BYTE_GAP = 1;
+
+	let canvasHeight = $derived.by(() => {
+		const snap = storageState.pageSnapshot;
+		if (!snap || width === 0) return viewportHeight;
+		if (showHex) {
+			const bytesPerRow = Math.max(1, Math.floor((width - PAD * 2 - 50) / (BYTE_W + BYTE_GAP)));
+			const totalRows = Math.ceil(snap.rawBytes.length / bytesPerRow);
+			const hexY = HEADER_H + 20;
+			const contentH = hexY + totalRows * (BYTE_H + BYTE_GAP) + PAD;
+			return Math.max(viewportHeight, contentH);
+		}
+		return viewportHeight;
+	});
 
 	let rafId = 0;
 	function scheduleRender() {
@@ -26,7 +39,7 @@
 		const ro = new ResizeObserver((entries) => {
 			const r = entries[0].contentRect;
 			width = r.width;
-			height = r.height;
+			viewportHeight = r.height;
 			scheduleRender();
 		});
 		ro.observe(container);
@@ -36,24 +49,26 @@
 	$effect(() => {
 		storageState.pageSnapshot;
 		showHex;
+		canvasHeight;
 		scheduleRender();
 	});
 
 	function render() {
 		if (!canvas || width === 0) return;
 		const dpr = window.devicePixelRatio || 1;
+		const h = canvasHeight;
 		canvas.width = width * dpr;
-		canvas.height = height * dpr;
+		canvas.height = h * dpr;
 		const ctx = canvas.getContext('2d')!;
 		ctx.scale(dpr, dpr);
-		ctx.clearRect(0, 0, width, height);
+		ctx.clearRect(0, 0, width, h);
 
 		const snap = storageState.pageSnapshot;
 		if (!snap) {
 			ctx.fillStyle = 'rgba(255,255,255,0.3)';
 			ctx.font = `12px ${MONO}`;
 			ctx.textAlign = 'center';
-			ctx.fillText('Click a page to inspect', width / 2, height / 2);
+			ctx.fillText('Click a page to inspect', width / 2, viewportHeight / 2);
 			return;
 		}
 
@@ -102,7 +117,6 @@
 			slotX += sw + 3;
 			if (slotX + sw > width - PAD) {
 				slotX = PAD;
-				// Can't render more rows in this simple implementation
 				break;
 			}
 		}
@@ -203,9 +217,9 @@
 		const hexY = HEADER_H + 20;
 		const bytes = snap.rawBytes;
 		const bytesPerRow = Math.max(1, Math.floor((width - PAD * 2 - 50) / (BYTE_W + BYTE_GAP)));
-		const maxRows = Math.floor((height - hexY - 10) / (BYTE_H + BYTE_GAP));
+		const totalRows = Math.ceil(bytes.length / bytesPerRow);
 
-		for (let row = 0; row < maxRows; row++) {
+		for (let row = 0; row < totalRows; row++) {
 			const baseOffset = row * bytesPerRow;
 			if (baseOffset >= bytes.length) break;
 
@@ -250,7 +264,7 @@
 	}
 </script>
 
-<div class="canvas-wrap" bind:this={container}>
+<div class="canvas-wrap">
 	<div class="toolbar">
 		<button class="toggle" class:active={!showHex} onclick={() => (showHex = false)}>Layout</button>
 		<button class="toggle" class:active={showHex} onclick={() => (showHex = true)}>Hex</button>
@@ -260,7 +274,9 @@
 			</button>
 		{/if}
 	</div>
-	<canvas bind:this={canvas} style="width:{width}px;height:{height - 28}px"></canvas>
+	<div class="canvas-viewport" bind:this={container}>
+		<canvas bind:this={canvas} style="width:{width}px;height:{canvasHeight}px"></canvas>
+	</div>
 </div>
 
 <style>
@@ -305,5 +321,11 @@
 		font-size: 10px;
 	}
 	.flush-btn:hover { background: rgba(251, 191, 36, 0.2); }
-	canvas { display: block; flex: 1; min-height: 0; }
+	.canvas-viewport {
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
+		overflow-x: hidden;
+	}
+	canvas { display: block; }
 </style>

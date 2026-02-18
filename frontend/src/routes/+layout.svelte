@@ -1,12 +1,10 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	let { children } = $props();
-	let currentPath = $derived(page.url.pathname);
 </script>
 
 <svelte:head>
 	<title>wizalloc</title>
-	<meta name="description" content="Interactive data structure visualizer powered by Rust/WASM" />
+	<meta name="description" content="Interactive storage engine visualizer powered by Rust/WASM" />
 </svelte:head>
 
 <div class="app">
@@ -14,12 +12,6 @@
 		<div class="header-left">
 			<span class="brand">wizalloc</span>
 		</div>
-		<nav>
-			<a href="/" class="nav-item" class:active={currentPath === '/'}>Linked List</a>
-			<a href="/storage" class="nav-item" class:active={currentPath === '/storage'}>Storage Engine</a>
-			<span class="nav-item disabled">B-Tree</span>
-			<span class="nav-item disabled">LSM Tree</span>
-		</nav>
 	</header>
 
 	<main>
@@ -89,37 +81,6 @@
 		color: rgba(255, 255, 255, 0.9);
 		letter-spacing: -0.3px;
 	}
-	nav {
-		display: flex;
-		gap: 2px;
-		background: rgba(255, 255, 255, 0.08);
-		border-radius: 9999px;
-		padding: 2px;
-	}
-	.nav-item {
-		padding: 2px 10px;
-		border-radius: 9999px;
-		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-		font-size: 11px;
-		text-decoration: none;
-		color: rgba(255, 255, 255, 0.4);
-		transition: all 0.15s;
-		cursor: pointer;
-		user-select: none;
-	}
-	.nav-item.active {
-		color: #fff;
-		background: #007acc;
-		box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
-	}
-	.nav-item.disabled {
-		opacity: 0.3;
-		cursor: default;
-	}
-	a.nav-item:hover:not(.active) {
-		color: rgba(255, 255, 255, 0.6);
-		background: rgba(255, 255, 255, 0.06);
-	}
 	main {
 		flex: 1;
 		min-height: 0;
@@ -146,13 +107,6 @@
 			padding: 0 12px;
 			padding-left: max(12px, env(safe-area-inset-left, 0px));
 			padding-right: max(12px, env(safe-area-inset-right, 0px));
-		}
-		.nav-item {
-			font-size: 10px;
-			padding: 2px 7px;
-		}
-		.nav-item.disabled {
-			display: none;
 		}
 		footer {
 			padding: 0 12px;
