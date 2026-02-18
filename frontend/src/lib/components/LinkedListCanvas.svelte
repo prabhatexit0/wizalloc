@@ -6,9 +6,11 @@
 		snapshot: LinkedListSnapshot;
 		animatingSteps: TraversalStep[];
 		activeStepIndex: number;
+		selectedIndex: number | null;
+		onSelectIndex: (index: number | null) => void;
 	}
 
-	let { snapshot, animatingSteps, activeStepIndex }: Props = $props();
+	let { snapshot, animatingSteps, activeStepIndex, selectedIndex, onSelectIndex }: Props = $props();
 
 	let canvas: HTMLCanvasElement;
 	let container: HTMLDivElement;
@@ -47,6 +49,8 @@
 		nullText: 'rgba(255, 255, 255, 0.2)',
 		dimText: 'rgba(255, 255, 255, 0.4)',
 	};
+
+	const SELECTED = { bg: 'rgba(168, 85, 247, 0.18)', border: 'rgba(168, 85, 247, 0.7)', text: '#c084fc' };
 
 	const STEP_COLORS: Record<number, { bg: string; border: string; text: string }> = {
 		[StepAction.Visit]: { bg: 'rgba(250, 204, 21, 0.12)', border: 'rgba(250, 204, 21, 0.4)', text: '#fbbf24' },
@@ -248,14 +252,15 @@
 		for (let i = iStart; i < iEnd; i++) {
 			const p = positions[i];
 			const colors = stepMap.get(p.arenaIndex);
+			const sel = selectedIndex === p.arenaIndex;
 
-			ctx.fillStyle = colors ? colors.bg : C.nodeBg;
-			ctx.strokeStyle = colors ? colors.border : C.nodeBorder;
-			ctx.lineWidth = colors ? 1.5 : 1;
+			ctx.fillStyle = sel ? SELECTED.bg : colors ? colors.bg : C.nodeBg;
+			ctx.strokeStyle = sel ? SELECTED.border : colors ? colors.border : C.nodeBorder;
+			ctx.lineWidth = sel ? 2 : colors ? 1.5 : 1;
 			roundRect(ctx, p.x, p.y, nw, nh, isMobile ? 6 : 8);
 			ctx.stroke();
 
-			ctx.fillStyle = colors ? colors.text : C.nodeText;
+			ctx.fillStyle = sel ? SELECTED.text : colors ? colors.text : C.nodeText;
 			ctx.font = font;
 			ctx.textAlign = 'center';
 			ctx.textBaseline = 'middle';
@@ -322,9 +327,44 @@
 		ctx.fill();
 	}
 
+	function handleClick(e: MouseEvent) {
+		if (!container) return;
+		const rect = canvas.getBoundingClientRect();
+		const mx = e.clientX - rect.left;
+		const my = e.clientY - rect.top + container.scrollTop;
+		const nw = nodeW, nh = nodeH;
+		const { positions } = layout;
+		for (let i = 0; i < positions.length; i++) {
+			const p = positions[i];
+			if (mx >= p.x && mx <= p.x + nw && my >= p.y && my <= p.y + nh) {
+				onSelectIndex(p.arenaIndex);
+				return;
+			}
+		}
+		onSelectIndex(null);
+	}
+
+	function scrollToSelected() {
+		if (selectedIndex === null || !container) return;
+		const { positions } = layout;
+		const nh = nodeH;
+		const p = positions.find(p => p.arenaIndex === selectedIndex);
+		if (!p) return;
+		const scrollY = container.scrollTop;
+		if (p.y < scrollY || p.y + nh > scrollY + viewH) {
+			container.scrollTo({ top: Math.max(0, p.y - viewH / 3), behavior: 'smooth' });
+		}
+	}
+
+	$effect(() => {
+		selectedIndex;
+		scrollToSelected();
+	});
+
 	$effect(() => {
 		snapshot;
 		activeStepIndex;
+		selectedIndex;
 		viewW;
 		viewH;
 		requestDraw();
@@ -352,7 +392,7 @@
 
 <div bind:this={container} class="canvas-wrap">
 	<div class="scroll-content" style="height: {layout.totalH}px;">
-		<canvas bind:this={canvas} class="viewport-canvas" style="width: {viewW}px; height: {viewH}px;"></canvas>
+		<canvas bind:this={canvas} class="viewport-canvas" style="width: {viewW}px; height: {viewH}px; cursor: pointer;" onclick={handleClick}></canvas>
 	</div>
 </div>
 

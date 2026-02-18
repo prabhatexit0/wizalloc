@@ -15,6 +15,7 @@ const EMPTY_SNAPSHOT: LinkedListSnapshot = {
 	length: 0,
 	head: null,
 	arena: [],
+	allSlots: [],
 	ordered: [],
 	traversal: []
 };
@@ -32,6 +33,7 @@ export function createLinkedListStore() {
 	let activeStepIndex = $state(-1);
 	let animating = $state(false);
 	let animationSpeed = $state(200); // ms per step
+	let selectedIndex = $state<number | null>(null);
 
 	async function initialize() {
 		await initEngine();
@@ -124,6 +126,10 @@ export function createLinkedListStore() {
 		animationSpeed = ms;
 	}
 
+	function selectNode(index: number | null) {
+		selectedIndex = selectedIndex === index ? null : index;
+	}
+
 	function destroy() {
 		engine?.destroy();
 		engine = null;
@@ -139,6 +145,7 @@ export function createLinkedListStore() {
 		clear,
 		generateRandom,
 		setAnimationSpeed,
+		selectNode,
 		destroy,
 		get snapshot() { return snapshot; },
 		get ready() { return ready; },
@@ -147,5 +154,6 @@ export function createLinkedListStore() {
 		get activeStepIndex() { return activeStepIndex; },
 		get animating() { return animating; },
 		get animationSpeed() { return animationSpeed; },
+		get selectedIndex() { return selectedIndex; },
 	};
 }

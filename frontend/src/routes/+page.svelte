@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { createLinkedListStore } from '$lib/stores/linkedlist.svelte.js';
 	import LinkedListCanvas from '$lib/components/LinkedListCanvas.svelte';
+	import ArenaCanvas from '$lib/components/ArenaCanvas.svelte';
 	import ControlPanel from '$lib/components/ControlPanel.svelte';
 
 	const store = createLinkedListStore();
@@ -29,6 +30,7 @@
 				<span class="legend-item"><span class="dot" style="background: rgba(74, 222, 128, 0.5)"></span>inserted</span>
 				<span class="legend-item"><span class="dot" style="background: rgba(248, 113, 113, 0.5)"></span>deleted</span>
 				<span class="legend-item"><span class="dot" style="background: rgba(96, 165, 250, 0.6)"></span>found</span>
+				<span class="legend-item"><span class="dot" style="background: rgba(168, 85, 247, 0.5)"></span>selected</span>
 			</div>
 		</div>
 
@@ -47,11 +49,37 @@
 			animationSpeed={store.animationSpeed}
 		/>
 
-		<LinkedListCanvas
-			snapshot={store.snapshot}
-			animatingSteps={store.animatingSteps}
-			activeStepIndex={store.activeStepIndex}
-		/>
+		<div class="viz-container">
+			<div class="viz-panel">
+				<div class="section-header">
+					<span class="section-label">Data Structure</span>
+					<span class="section-hint">logical view — click a node to locate in memory</span>
+				</div>
+				<LinkedListCanvas
+					snapshot={store.snapshot}
+					animatingSteps={store.animatingSteps}
+					activeStepIndex={store.activeStepIndex}
+					selectedIndex={store.selectedIndex}
+					onSelectIndex={store.selectNode}
+				/>
+			</div>
+
+			<div class="divider"></div>
+
+			<div class="viz-panel">
+				<div class="section-header">
+					<span class="section-label">Memory Layout</span>
+					<span class="section-hint">arena allocation — contiguous slots with free-list recycling</span>
+				</div>
+				<ArenaCanvas
+					snapshot={store.snapshot}
+					animatingSteps={store.animatingSteps}
+					activeStepIndex={store.activeStepIndex}
+					selectedIndex={store.selectedIndex}
+					onSelectIndex={store.selectNode}
+				/>
+			</div>
+		</div>
 	</div>
 {/if}
 
@@ -127,6 +155,49 @@
 		display: inline-block;
 	}
 
+	.viz-container {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+	}
+
+	.viz-panel {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+	}
+
+	.section-header {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 4px 16px;
+		flex-shrink: 0;
+	}
+
+	.section-label {
+		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+		font-size: 10px;
+		font-weight: 600;
+		color: rgba(255, 255, 255, 0.45);
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.section-hint {
+		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+		font-size: 10px;
+		color: rgba(255, 255, 255, 0.18);
+	}
+
+	.divider {
+		height: 1px;
+		background: rgba(255, 255, 255, 0.06);
+		flex-shrink: 0;
+	}
+
 	@media (max-width: 640px) {
 		.page-header {
 			flex-direction: column;
@@ -141,6 +212,12 @@
 			gap: 10px;
 		}
 		.sub {
+			display: none;
+		}
+		.section-header {
+			padding: 3px 12px;
+		}
+		.section-hint {
 			display: none;
 		}
 	}
