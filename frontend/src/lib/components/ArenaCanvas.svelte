@@ -8,9 +8,10 @@
 		activeStepIndex: number;
 		selectedIndex: number | null;
 		onSelectIndex: (index: number | null) => void;
+		blinking?: boolean;
 	}
 
-	let { snapshot, animatingSteps, activeStepIndex, selectedIndex, onSelectIndex }: Props = $props();
+	let { snapshot, animatingSteps, activeStepIndex, selectedIndex, onSelectIndex, blinking = false }: Props = $props();
 
 	let canvas: HTMLCanvasElement;
 	let container: HTMLDivElement;
@@ -94,11 +95,13 @@
 		return dotPattern;
 	}
 
-	function buildStepMap(steps: TraversalStep[], upTo: number) {
+	function buildStepMap(steps: TraversalStep[], upTo: number, blinkOnly: boolean) {
 		const map = new Map<number, { bg: string; border: string; text: string }>();
 		if (upTo < 0) return map;
 		const end = Math.min(upTo, steps.length - 1);
 		for (let i = 0; i <= end; i++) {
+			// When blinking, only highlight the deleted node (skip Visit steps)
+			if (blinkOnly && steps[i].action === StepAction.Visit) continue;
 			const c = STEP_COLORS[steps[i].action];
 			if (c) map.set(steps[i].index, c);
 		}
@@ -185,7 +188,7 @@
 		const cullTop = scrollY - cullMargin;
 		const cullBottom = scrollY + viewH + cullMargin;
 
-		const stepMap = buildStepMap(animatingSteps, activeStepIndex);
+		const stepMap = buildStepMap(animatingSteps, activeStepIndex, blinking);
 
 		const r = isMobile ? 4 : 6;
 
@@ -371,6 +374,7 @@
 		snapshot;
 		activeStepIndex;
 		selectedIndex;
+		blinking;
 		viewW;
 		viewH;
 		requestDraw();

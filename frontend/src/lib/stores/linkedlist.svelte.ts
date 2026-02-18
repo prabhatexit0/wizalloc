@@ -36,6 +36,7 @@ export function createLinkedListStore() {
 	let animating = $state(false);
 	let animationSpeed = $state(200); // ms per step
 	let selectedIndex = $state<number | null>(null);
+	let blinking = $state(false);
 
 	async function initialize() {
 		await initEngine();
@@ -102,6 +103,7 @@ export function createLinkedListStore() {
 		animateTraversal(postSnap.traversal, () => {
 			// Keep animating=true during blink phase
 			animating = true;
+			blinking = true;
 			const lastIdx = postSnap.traversal.length - 1;
 			let blinks = 0;
 			const blinkInterval = setInterval(() => {
@@ -112,6 +114,7 @@ export function createLinkedListStore() {
 					animatingSteps = [];
 					activeStepIndex = -1;
 					animating = false;
+					blinking = false;
 					snapshot = postSnap;
 				}
 			}, 100);
@@ -186,5 +189,6 @@ export function createLinkedListStore() {
 		get animating() { return animating; },
 		get animationSpeed() { return animationSpeed; },
 		get selectedIndex() { return selectedIndex; },
+		get blinking() { return blinking; },
 	};
 }

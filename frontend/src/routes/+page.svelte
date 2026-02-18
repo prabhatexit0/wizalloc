@@ -81,6 +81,7 @@
 					activeStepIndex={store.activeStepIndex}
 					selectedIndex={store.selectedIndex}
 					onSelectIndex={store.selectNode}
+					blinking={store.blinking}
 				/>
 			</div>
 		</div>
