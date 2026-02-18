@@ -44,9 +44,10 @@ export function createLinkedListStore() {
 		ready = true;
 	}
 
-	function animateTraversal(steps: TraversalStep[]): Promise<void> {
+	function animateTraversal(steps: TraversalStep[], onComplete?: () => void): Promise<void> {
 		return new Promise((resolve) => {
 			if (steps.length === 0) {
+				onComplete?.();
 				resolve();
 				return;
 			}
@@ -59,6 +60,7 @@ export function createLinkedListStore() {
 				if (activeStepIndex >= steps.length) {
 					clearInterval(interval);
 					animating = false;
+					onComplete?.();
 					resolve();
 				}
 			}, animationSpeed);
@@ -83,10 +85,37 @@ export function createLinkedListStore() {
 
 	function deleteValue(value: number) {
 		if (!engine) return;
-		const { found, snapshot: snap } = engine.delete(value);
-		snapshot = snap;
+		// Capture pre-delete snapshot so the node stays visible during animation
+		const preSnap = engine.snap();
+		const { found, snapshot: postSnap } = engine.delete(value);
 		lastOp = { kind: 'delete', value, found };
-		animateTraversal(snap.traversal);
+
+		if (!found || postSnap.traversal.length === 0) {
+			snapshot = postSnap;
+			animateTraversal(postSnap.traversal);
+			return;
+		}
+
+		// Show pre-delete state (node still in ordered list) during traversal,
+		// then blink the deleted node before removing it.
+		snapshot = preSnap;
+		animateTraversal(postSnap.traversal, () => {
+			// Keep animating=true during blink phase
+			animating = true;
+			const lastIdx = postSnap.traversal.length - 1;
+			let blinks = 0;
+			const blinkInterval = setInterval(() => {
+				activeStepIndex = blinks % 2 === 0 ? -1 : lastIdx;
+				blinks++;
+				if (blinks >= 6) {
+					clearInterval(blinkInterval);
+					animatingSteps = [];
+					activeStepIndex = -1;
+					animating = false;
+					snapshot = postSnap;
+				}
+			}, 100);
+		});
 	}
 
 	function searchValue(value: number) {
