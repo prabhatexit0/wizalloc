@@ -2,6 +2,7 @@
 
 let topBottomRatio = $state(0.5);
 let leftRightRatio = $state(0.5);
+let sidebarCollapsed = $state(false);
 let bufferPoolCollapsed = $state(false);
 let diskCollapsed = $state(false);
 let inspectorCollapsed = $state(false);
@@ -16,6 +17,7 @@ function clampRatio(v: number): number {
 export const layoutState = {
 	get topBottomRatio() { return topBottomRatio; },
 	get leftRightRatio() { return leftRightRatio; },
+	get sidebarCollapsed() { return sidebarCollapsed; },
 	get bufferPoolCollapsed() { return bufferPoolCollapsed; },
 	get diskCollapsed() { return diskCollapsed; },
 	get inspectorCollapsed() { return inspectorCollapsed; },
@@ -23,6 +25,7 @@ export const layoutState = {
 	setTopBottomRatio(v: number) { topBottomRatio = clampRatio(v); },
 	setLeftRightRatio(v: number) { leftRightRatio = clampRatio(v); },
 
+	toggleSidebar() { sidebarCollapsed = !sidebarCollapsed; },
 	toggleBufferPool() { bufferPoolCollapsed = !bufferPoolCollapsed; },
 	toggleDisk() { diskCollapsed = !diskCollapsed; },
 	toggleInspector() { inspectorCollapsed = !inspectorCollapsed; },

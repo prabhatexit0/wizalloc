@@ -89,9 +89,18 @@
 	</div>
 {:else}
 	<div class="layout">
-		<aside class="sidebar">
-			<StorageControlPanel />
-		</aside>
+		{#if layoutState.sidebarCollapsed}
+			<aside class="sidebar collapsed">
+				<PaneHeader title="Controls" collapsed={true} onToggle={layoutState.toggleSidebar} vertical={true} />
+			</aside>
+		{:else}
+			<aside class="sidebar">
+				<PaneHeader title="Controls" collapsed={false} onToggle={layoutState.toggleSidebar} />
+				<div class="sidebar-content">
+					<StorageControlPanel />
+				</div>
+			</aside>
+		{/if}
 		<div class="visualizations" bind:this={vizContainer}>
 			<div class="viz-row top" bind:this={topRowEl} style="flex:{topRowFlex}">
 				{#if layoutState.bufferPoolCollapsed}
@@ -170,8 +179,21 @@
 		min-width: 260px;
 		max-width: 340px;
 		border-right: 1px solid rgba(255, 255, 255, 0.06);
-		overflow-y: auto;
 		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+	.sidebar.collapsed {
+		width: auto;
+		min-width: 0;
+		max-width: none;
+		flex-direction: row;
+	}
+	.sidebar-content {
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
 	}
 	.visualizations {
 		flex: 1;
@@ -209,11 +231,15 @@
 			flex-direction: column;
 		}
 		.sidebar {
-			width: 100%;
-			max-width: none;
+			width: 100% !important;
+			max-width: none !important;
+			min-width: 0 !important;
 			max-height: 40vh;
 			border-right: none;
 			border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		}
+		.sidebar.collapsed {
+			max-height: none;
 		}
 		.viz-row.top {
 			flex-direction: column;

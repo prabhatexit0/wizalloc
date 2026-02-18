@@ -330,8 +330,6 @@
 		flex-direction: column;
 		gap: 8px;
 		padding: 8px;
-		height: 100%;
-		overflow-y: auto;
 		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
 		font-size: 11px;
 	}
