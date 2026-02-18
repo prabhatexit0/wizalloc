@@ -1,0 +1,15 @@
+{
+  "name": "wizalloc-engine",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "wizalloc_engine_bg.wasm",
+    "wizalloc_engine.js",
+    "wizalloc_engine.d.ts"
+  ],
+  "main": "wizalloc_engine.js",
+  "types": "wizalloc_engine.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
