@@ -17,10 +17,18 @@
 	let viewW = $state(900);
 	let viewH = $state(300);
 
+	// Simulated memory layout: Node { value: u32, next: u32, alive: bool } = 12 bytes
+	const BASE_ADDR = 0x1000;
+	const NODE_SIZE = 12; // bytes per arena slot
+
+	function toHex(addr: number): string {
+		return '0x' + addr.toString(16).toUpperCase().padStart(4, '0');
+	}
+
 	let isMobile = $derived(viewW < 500);
-	// Each slot: a cell showing [index | value | →next]
-	let cellW = $derived(isMobile ? 48 : 64);
-	let cellH = $derived(isMobile ? 48 : 56);
+	// Each slot: a cell showing [index | value | →next | address]
+	let cellW = $derived(isMobile ? 58 : 80);
+	let cellH = $derived(isMobile ? 54 : 62);
 	let cellGap = $derived(isMobile ? 4 : 6);
 	let padX = $derived(isMobile ? 12 : 24);
 	let padY = $derived(isMobile ? 28 : 32);
@@ -36,6 +44,9 @@
 	let fontNext = $derived(isMobile
 		? `8px ${MONO}`
 		: `9px ${MONO}`);
+	let fontAddr = $derived(isMobile
+		? `7px ${MONO}`
+		: `8px ${MONO}`);
 
 	const C = {
 		bg: '#1a1a1a',
@@ -51,6 +62,7 @@
 		headBadge: '#007acc',
 		dimText: 'rgba(255, 255, 255, 0.4)',
 		freeLabel: 'rgba(248, 113, 113, 0.4)',
+		addrText: 'rgba(255, 255, 255, 0.18)',
 	};
 
 	const SELECTED = { bg: 'rgba(168, 85, 247, 0.18)', border: 'rgba(168, 85, 247, 0.7)', text: '#c084fc' };
@@ -239,6 +251,16 @@
 			ctx.textBaseline = 'top';
 			ctx.fillText(String(i), cell.x + 4, cell.y + 3);
 
+			// Memory address (top-right)
+			const startAddr = BASE_ADDR + i * NODE_SIZE;
+			const endAddr = startAddr + NODE_SIZE - 1;
+			ctx.fillStyle = C.addrText;
+			ctx.font = fontAddr;
+			ctx.textAlign = 'right';
+			ctx.textBaseline = 'top';
+			ctx.fillText(toHex(startAddr), cell.x + cw - 3, cell.y + 3);
+			ctx.fillText(toHex(endAddr), cell.x + cw - 3, cell.y + (isMobile ? 11 : 12));
+
 			if (alive) {
 				// Value (center)
 				ctx.fillStyle = textCol;
@@ -277,14 +299,18 @@
 		ctx.save();
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 		ctx.fillStyle = 'rgba(26, 26, 26, 0.85)';
-		const statsW = isMobile ? 200 : 260;
+		const statsW = isMobile ? 240 : 420;
 		ctx.fillRect(0, viewH - 24, statsW, 24);
 		ctx.fillStyle = C.dimText;
 		ctx.font = fontIdx;
 		ctx.textAlign = 'left';
 		ctx.textBaseline = 'bottom';
 		const freeCount = slots.filter((s: ArenaSlot) => !s.alive).length;
-		ctx.fillText(`${slots.length} slots · ${slots.length - freeCount} alive · ${freeCount} free`, 8, viewH - 8);
+		const arenaStart = toHex(BASE_ADDR);
+		const arenaEnd = toHex(BASE_ADDR + slots.length * NODE_SIZE - 1);
+		const totalBytes = slots.length * NODE_SIZE;
+		const rangeStr = slots.length > 0 ? ` · ${arenaStart}..${arenaEnd} (${totalBytes}B)` : '';
+		ctx.fillText(`${slots.length} slots · ${slots.length - freeCount} alive · ${freeCount} free${rangeStr}`, 8, viewH - 8);
 		ctx.restore();
 	}
 
