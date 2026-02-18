@@ -43,10 +43,14 @@
 			onClear={store.clear}
 			onGenerate={store.generateRandom}
 			onSpeedChange={store.setAnimationSpeed}
+			onClearSelection={() => store.selectNode(null)}
 			lastOp={store.lastOp}
 			nodeCount={store.snapshot.length}
 			animating={store.animating}
 			animationSpeed={store.animationSpeed}
+			selectedValue={store.selectedIndex !== null && store.selectedIndex < store.snapshot.allSlots.length
+				? (store.snapshot.allSlots[store.selectedIndex]?.alive ? store.snapshot.allSlots[store.selectedIndex].value : null)
+				: null}
 		/>
 
 		<div class="viz-container">
