@@ -66,9 +66,11 @@
 </script>
 
 <div class="panel">
+	<!-- Row 1: Value input + CRUD operations -->
 	<div class="row">
 		<input
 			type="number"
+			inputmode="numeric"
 			bind:value={inputValue}
 			onkeydown={handleKeydown}
 			placeholder="value"
@@ -89,20 +91,24 @@
 				search
 			</button>
 		</div>
+	</div>
 
-		<div class="sep"></div>
-
-		<input
-			type="number"
-			bind:value={genCount}
-			placeholder="n"
-			class="input input-sm"
-			min="1"
-			max="500"
-		/>
-		<button onclick={() => onGenerate(parseInt(genCount) || 50)} disabled={animating} class="btn">
-			generate
-		</button>
+	<!-- Row 2: Generate, sort, clear, speed, count -->
+	<div class="row">
+		<div class="gen-group">
+			<input
+				type="number"
+				inputmode="numeric"
+				bind:value={genCount}
+				placeholder="n"
+				class="input input-sm"
+				min="1"
+				max="500"
+			/>
+			<button onclick={() => onGenerate(parseInt(genCount) || 50)} disabled={animating} class="btn">
+				generate
+			</button>
+		</div>
 		<button onclick={onSort} disabled={animating || nodeCount === 0} class="btn primary">
 			sort
 		</button>
@@ -150,6 +156,11 @@
 		align-items: center;
 		flex-wrap: wrap;
 	}
+	.gen-group {
+		display: flex;
+		gap: 6px;
+		align-items: center;
+	}
 	.input {
 		background: #1a1a1a;
 		border: 1px solid rgba(255, 255, 255, 0.1);
@@ -192,7 +203,7 @@
 		background: rgba(255, 255, 255, 0.06);
 	}
 	.btn:active:not(:disabled) {
-		background: rgba(255, 255, 255, 0.1);
+		background: rgba(255, 255, 255, 0.15);
 	}
 	.btn:disabled {
 		opacity: 0.3;
@@ -213,12 +224,6 @@
 		color: #f87171;
 		border-color: rgba(248, 113, 113, 0.3);
 		background: rgba(248, 113, 113, 0.08);
-	}
-	.sep {
-		width: 1px;
-		height: 16px;
-		background: rgba(255, 255, 255, 0.06);
-		margin: 0 4px;
 	}
 	.spacer {
 		flex: 1;
@@ -269,5 +274,61 @@
 	.status.warn {
 		color: #fbbf24;
 		background: rgba(251, 191, 36, 0.08);
+	}
+
+	/* ---- Mobile ---- */
+	@media (max-width: 640px) {
+		.panel {
+			padding: 8px 12px;
+			gap: 8px;
+		}
+		.row {
+			gap: 6px;
+		}
+		.input {
+			height: 36px;
+			font-size: 14px;
+			padding: 6px 10px;
+			flex: 1;
+			min-width: 0;
+			width: auto;
+		}
+		.input-sm {
+			flex: 0 0 56px;
+		}
+		.btn-group {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 6px;
+			width: 100%;
+		}
+		.btn {
+			height: 36px;
+			font-size: 12px;
+			padding: 6px 8px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+		.gen-group {
+			flex: 1;
+		}
+		.gen-group .input {
+			flex: 0 0 56px;
+		}
+		.spacer {
+			display: none;
+		}
+		.speed {
+			width: 100%;
+			margin-top: 2px;
+		}
+		.speed input[type="range"] {
+			flex: 1;
+			height: 20px;
+		}
+		.count {
+			margin-left: auto;
+		}
 	}
 </style>

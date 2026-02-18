@@ -20,8 +20,10 @@
 {:else}
 	<div class="page">
 		<div class="page-header">
-			<span class="label">Linked List</span>
-			<span class="sub">O(n) sequential access</span>
+			<div class="page-title">
+				<span class="label">Linked List</span>
+				<span class="sub">O(n) sequential access</span>
+			</div>
 			<div class="legend">
 				<span class="legend-item"><span class="dot" style="background: rgba(250, 204, 21, 0.5)"></span>visiting</span>
 				<span class="legend-item"><span class="dot" style="background: rgba(74, 222, 128, 0.5)"></span>inserted</span>
@@ -84,10 +86,16 @@
 	.page-header {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		gap: 8px;
 		padding: 8px 16px;
 		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 		flex-shrink: 0;
+	}
+	.page-title {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 	}
 	.label {
 		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
@@ -103,7 +111,6 @@
 	.legend {
 		display: flex;
 		gap: 12px;
-		margin-left: auto;
 	}
 	.legend-item {
 		display: flex;
@@ -118,5 +125,23 @@
 		height: 6px;
 		border-radius: 50%;
 		display: inline-block;
+	}
+
+	@media (max-width: 640px) {
+		.page-header {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 4px;
+			padding: 6px 12px;
+		}
+		.page-title {
+			gap: 6px;
+		}
+		.legend {
+			gap: 10px;
+		}
+		.sub {
+			display: none;
+		}
 	}
 </style>

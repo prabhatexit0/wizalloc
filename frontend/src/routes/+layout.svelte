@@ -45,6 +45,16 @@
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
 		overflow: hidden;
+		/* Prevent pull-to-refresh and overscroll bounce on mobile */
+		overscroll-behavior: none;
+	}
+	:global(input[type="number"]) {
+		-moz-appearance: textfield;
+	}
+	:global(input[type="number"]::-webkit-inner-spin-button,
+	input[type="number"]::-webkit-outer-spin-button) {
+		-webkit-appearance: none;
+		margin: 0;
 	}
 	.app {
 		height: 100vh;
@@ -53,6 +63,7 @@
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
+		padding-top: env(safe-area-inset-top, 0px);
 	}
 	header {
 		display: flex;
@@ -60,6 +71,8 @@
 		justify-content: space-between;
 		height: 36px;
 		padding: 0 16px;
+		padding-left: max(16px, env(safe-area-inset-left, 0px));
+		padding-right: max(16px, env(safe-area-inset-right, 0px));
 		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 		flex-shrink: 0;
 	}
@@ -117,10 +130,32 @@
 		align-items: center;
 		gap: 12px;
 		padding: 0 16px;
+		padding-left: max(16px, env(safe-area-inset-left, 0px));
+		padding-bottom: env(safe-area-inset-bottom, 0px);
 		background: #007acc;
 		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
 		font-size: 11px;
 		color: #fff;
 		flex-shrink: 0;
+	}
+
+	@media (max-width: 640px) {
+		header {
+			padding: 0 12px;
+			padding-left: max(12px, env(safe-area-inset-left, 0px));
+			padding-right: max(12px, env(safe-area-inset-right, 0px));
+		}
+		.nav-item {
+			font-size: 10px;
+			padding: 2px 7px;
+		}
+		.nav-item.disabled {
+			display: none;
+		}
+		footer {
+			padding: 0 12px;
+			padding-left: max(12px, env(safe-area-inset-left, 0px));
+			padding-bottom: env(safe-area-inset-bottom, 0px);
+		}
 	}
 </style>

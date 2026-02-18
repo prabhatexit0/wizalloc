@@ -15,20 +15,25 @@
 	let viewW = $state(900);
 	let viewH = $state(400);
 
-	// Layout
-	const NODE_W = 72;
-	const NODE_H = 32;
-	const GAP = 28;
+	// Adaptive layout — smaller nodes on narrow screens
+	let isMobile = $derived(viewW < 500);
+	let nodeW = $derived(isMobile ? 56 : 72);
+	let nodeH = $derived(isMobile ? 28 : 32);
+	let gap = $derived(isMobile ? 18 : 28);
+	let padX = $derived(isMobile ? 20 : 48);
+	let padY = $derived(isMobile ? 32 : 48);
+	let rowH = $derived(nodeH + gap + 16);
+
 	const ARROW_SIZE = 6;
-	const PAD_X = 48;
-	const PAD_Y = 48;
-	const ROW_H = NODE_H + GAP + 16;
 	const DOT_TILE = 24;
-	const CULL_MARGIN = ROW_H * 2;
 
 	// Fonts
-	const FONT = '12px "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace';
-	const FONT_SM = '10px "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace';
+	let font = $derived(isMobile
+		? '11px "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace'
+		: '12px "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace');
+	let fontSm = $derived(isMobile
+		? '9px "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace'
+		: '10px "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace');
 
 	// Colors
 	const C = {
@@ -84,7 +89,7 @@
 		return map;
 	}
 
-	// --- Layout (derived, recomputed only on snapshot/width change) ---
+	// --- Layout ---
 	interface NodePos {
 		x: number;
 		y: number;
@@ -96,9 +101,10 @@
 
 	let layout = $derived.by(() => {
 		const nodes = snapshot.ordered;
-		const nodesPerRow = Math.max(1, Math.floor((viewW - PAD_X * 2 + GAP) / (NODE_W + GAP)));
+		const nw = nodeW, nh = nodeH, g = gap, px = padX, py = padY, rh = rowH;
+		const nodesPerRow = Math.max(1, Math.floor((viewW - px * 2 + g) / (nw + g)));
 		const totalRows = nodes.length > 0 ? Math.ceil(nodes.length / nodesPerRow) : 0;
-		const totalH = totalRows * ROW_H + PAD_Y * 2;
+		const totalH = totalRows * rh + py * 2;
 		const positions: NodePos[] = new Array(nodes.length);
 
 		for (let i = 0; i < nodes.length; i++) {
@@ -107,8 +113,8 @@
 			const reversed = (row & 1) === 1;
 			const col = reversed ? (nodesPerRow - 1 - colInRow) : colInRow;
 			positions[i] = {
-				x: PAD_X + col * (NODE_W + GAP),
-				y: PAD_Y + row * ROW_H,
+				x: px + col * (nw + g),
+				y: py + row * rh,
 				value: nodes[i].value,
 				arenaIndex: nodes[i].index,
 				row,
@@ -134,11 +140,12 @@
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
+		const nw = nodeW, nh = nodeH, py = padY, rh = rowH;
+		const cullMargin = rh * 2;
 		const { positions, totalH } = layout;
 		const scrollY = container.scrollTop;
 		const dpr = window.devicePixelRatio || 1;
 
-		// Canvas is always viewport-sized (never the full content height)
 		const cw = (viewW * dpr) | 0;
 		const ch = (viewH * dpr) | 0;
 		if (canvas.width !== cw || canvas.height !== ch) {
@@ -146,17 +153,15 @@
 			canvas.height = ch;
 		}
 
-		// Translate so we draw in "world" coordinates, offset by scroll
 		ctx.setTransform(dpr, 0, 0, dpr, 0, -scrollY * dpr);
 
-		// Background + dot grid (cover the visible viewport in world coords)
+		// Background
 		const pat = getDotPattern(ctx, dpr);
 		ctx.save();
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 		ctx.fillStyle = pat;
 		ctx.fillRect(0, 0, viewW, viewH);
 		ctx.restore();
-		// Re-apply world transform after background
 		ctx.setTransform(dpr, 0, 0, dpr, 0, -scrollY * dpr);
 
 		if (positions.length === 0) {
@@ -168,13 +173,11 @@
 			return;
 		}
 
-		// Cull bounds (in world coordinates)
-		const cullTop = scrollY - CULL_MARGIN;
-		const cullBottom = scrollY + viewH + CULL_MARGIN;
+		const cullTop = scrollY - cullMargin;
+		const cullBottom = scrollY + viewH + cullMargin;
 
-		// Find visible row range for fast skipping
-		const firstVisRow = Math.max(0, Math.floor((cullTop - PAD_Y) / ROW_H));
-		const lastVisRow = Math.ceil((cullBottom - PAD_Y) / ROW_H);
+		const firstVisRow = Math.max(0, Math.floor((cullTop - py) / rh));
+		const lastVisRow = Math.ceil((cullBottom - py) / rh);
 		const { nodesPerRow } = layout;
 		const iStart = Math.max(0, firstVisRow * nodesPerRow);
 		const iEnd = Math.min(positions.length, (lastVisRow + 1) * nodesPerRow);
@@ -186,25 +189,25 @@
 		for (let i = Math.max(0, iStart - 1); i < iEnd && i < positions.length - 1; i++) {
 			const p = positions[i];
 			const np = positions[i + 1];
-			if (p.y + NODE_H < cullTop && np.y + NODE_H < cullTop) continue;
+			if (p.y + nh < cullTop && np.y + nh < cullTop) continue;
 			if (p.y > cullBottom && np.y > cullBottom) continue;
 
 			const colors = stepMap.get(p.arenaIndex);
 			ctx.strokeStyle = colors ? colors.border : C.connector;
 
 			if (np.row === p.row) {
-				const fromX = p.reversed ? p.x : p.x + NODE_W;
-				const toX = p.reversed ? np.x + NODE_W : np.x;
-				const midY = p.y + NODE_H / 2;
+				const fromX = p.reversed ? p.x : p.x + nw;
+				const toX = p.reversed ? np.x + nw : np.x;
+				const midY = p.y + nh / 2;
 				ctx.beginPath();
 				ctx.moveTo(fromX, midY);
 				ctx.lineTo(toX, midY);
 				ctx.stroke();
 				drawArrowHead(ctx, toX, midY, p.reversed ? Math.PI : 0);
 			} else {
-				const fromX = p.x + NODE_W / 2;
-				const fromY = p.y + NODE_H;
-				const toX = np.x + NODE_W / 2;
+				const fromX = p.x + nw / 2;
+				const fromY = p.y + nh;
+				const toX = np.x + nw / 2;
 				const toY = np.y;
 				const cpOff = (toY - fromY) * 0.4;
 				ctx.beginPath();
@@ -219,8 +222,8 @@
 		if (positions.length > 0) {
 			const last = positions[positions.length - 1];
 			if (last.y >= cullTop && last.y <= cullBottom) {
-				const endX = last.reversed ? last.x : last.x + NODE_W;
-				const midY = last.y + NODE_H / 2;
+				const endX = last.reversed ? last.x : last.x + nw;
+				const midY = last.y + nh / 2;
 				const dir = last.reversed ? -1 : 1;
 				const nullX = endX + dir * 16;
 				ctx.strokeStyle = C.connector;
@@ -234,7 +237,7 @@
 				ctx.lineTo(nullX, midY + 6);
 				ctx.stroke();
 				ctx.fillStyle = C.nullText;
-				ctx.font = FONT_SM;
+				ctx.font = fontSm;
 				ctx.textAlign = last.reversed ? 'right' : 'left';
 				ctx.textBaseline = 'middle';
 				ctx.fillText('null', nullX + dir * 5, midY);
@@ -249,45 +252,48 @@
 			ctx.fillStyle = colors ? colors.bg : C.nodeBg;
 			ctx.strokeStyle = colors ? colors.border : C.nodeBorder;
 			ctx.lineWidth = colors ? 1.5 : 1;
-			roundRect(ctx, p.x, p.y, NODE_W, NODE_H, 8);
+			roundRect(ctx, p.x, p.y, nw, nh, isMobile ? 6 : 8);
 			ctx.stroke();
 
 			ctx.fillStyle = colors ? colors.text : C.nodeText;
-			ctx.font = FONT;
+			ctx.font = font;
 			ctx.textAlign = 'center';
 			ctx.textBaseline = 'middle';
-			ctx.fillText(String(p.value), p.x + NODE_W / 2, p.y + NODE_H / 2 - 1);
+			ctx.fillText(String(p.value), p.x + nw / 2, p.y + nh / 2 - 1);
 		}
 
-		// --- Index labels (batched) ---
-		ctx.fillStyle = C.indexText;
-		ctx.font = FONT_SM;
-		ctx.textAlign = 'right';
-		ctx.textBaseline = 'top';
-		for (let i = iStart; i < iEnd; i++) {
-			const p = positions[i];
-			ctx.fillText(String(p.arenaIndex), p.x + NODE_W - 4, p.y + NODE_H + 2);
+		// --- Index labels ---
+		if (!isMobile) {
+			ctx.fillStyle = C.indexText;
+			ctx.font = fontSm;
+			ctx.textAlign = 'right';
+			ctx.textBaseline = 'top';
+			for (let i = iStart; i < iEnd; i++) {
+				const p = positions[i];
+				ctx.fillText(String(p.arenaIndex), p.x + nw - 4, p.y + nh + 2);
+			}
 		}
 
 		// HEAD badge
-		if (positions.length > 0 && positions[0].y + NODE_H >= cullTop && positions[0].y <= cullBottom) {
+		if (positions.length > 0 && positions[0].y + nh >= cullTop && positions[0].y <= cullBottom) {
 			ctx.fillStyle = C.headBadge;
-			ctx.font = FONT_SM;
+			ctx.font = fontSm;
 			ctx.textAlign = 'center';
 			ctx.textBaseline = 'bottom';
-			ctx.fillText('HEAD', positions[0].x + NODE_W / 2, positions[0].y - 4);
+			ctx.fillText('HEAD', positions[0].x + nw / 2, positions[0].y - 4);
 		}
 
-		// Stats overlay (fixed to viewport bottom-left, not world coords)
+		// Stats overlay
 		ctx.save();
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 		ctx.fillStyle = 'rgba(26, 26, 26, 0.85)';
-		ctx.fillRect(0, viewH - 24, 220, 24);
+		const statsW = isMobile ? 170 : 220;
+		ctx.fillRect(0, viewH - 24, statsW, 24);
 		ctx.fillStyle = C.dimText;
-		ctx.font = FONT_SM;
+		ctx.font = fontSm;
 		ctx.textAlign = 'left';
 		ctx.textBaseline = 'bottom';
-		ctx.fillText(`${snapshot.length} nodes · ${snapshot.arena.length} arena slots`, 12, viewH - 8);
+		ctx.fillText(`${snapshot.length} nodes · ${snapshot.arena.length} slots`, 8, viewH - 8);
 		ctx.restore();
 	}
 
@@ -316,7 +322,6 @@
 		ctx.fill();
 	}
 
-	// Reactive draw triggers
 	$effect(() => {
 		snapshot;
 		activeStepIndex;
@@ -325,7 +330,6 @@
 		requestDraw();
 	});
 
-	// Scroll → redraw
 	$effect(() => {
 		if (!container) return;
 		const onScroll = () => requestDraw();
@@ -333,7 +337,6 @@
 		return () => container.removeEventListener('scroll', onScroll);
 	});
 
-	// Resize observer
 	$effect(() => {
 		if (!container) return;
 		const ro = new ResizeObserver((entries) => {
@@ -360,6 +363,7 @@
 		min-height: 0;
 		overflow-y: auto;
 		overflow-x: hidden;
+		-webkit-overflow-scrolling: touch;
 	}
 	.canvas-wrap::-webkit-scrollbar {
 		width: 6px;
@@ -379,5 +383,6 @@
 		display: block;
 		position: sticky;
 		top: 0;
+		touch-action: pan-y;
 	}
 </style>
