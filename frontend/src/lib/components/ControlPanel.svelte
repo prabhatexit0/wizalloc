@@ -10,16 +10,18 @@
 		onClear: () => void;
 		onGenerate: (count: number) => void;
 		onSpeedChange: (ms: number) => void;
+		onClearSelection: () => void;
 		lastOp: OperationResult | null;
 		nodeCount: number;
 		animating: boolean;
 		animationSpeed: number;
+		selectedValue: number | null;
 	}
 
 	let {
 		onPushFront, onInsertSorted, onDelete, onSearch,
-		onSort, onClear, onGenerate, onSpeedChange,
-		lastOp, nodeCount, animating, animationSpeed
+		onSort, onClear, onGenerate, onSpeedChange, onClearSelection,
+		lastOp, nodeCount, animating, animationSpeed, selectedValue
 	}: Props = $props();
 
 	let inputValue = $state('');
@@ -35,6 +37,17 @@
 		if (n === null) return;
 		action(n);
 		inputValue = '';
+	}
+
+	function handleDelete() {
+		const n = getInputNum();
+		if (n !== null) {
+			onDelete(n);
+			inputValue = '';
+		} else if (selectedValue !== null) {
+			onDelete(selectedValue);
+			onClearSelection();
+		}
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -84,8 +97,8 @@
 			<button onclick={() => handleAction(onInsertSorted)} disabled={animating || !inputValue} class="btn primary">
 				insert sorted
 			</button>
-			<button onclick={() => handleAction(onDelete)} disabled={animating || !inputValue} class="btn danger">
-				delete
+			<button onclick={handleDelete} disabled={animating || (!inputValue && selectedValue === null)} class="btn danger">
+				{selectedValue !== null && !inputValue ? `delete [${selectedValue}]` : 'delete'}
 			</button>
 			<button onclick={() => handleAction(onSearch)} disabled={animating || !inputValue} class="btn">
 				search

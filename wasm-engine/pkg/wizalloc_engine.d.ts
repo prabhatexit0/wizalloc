@@ -34,11 +34,13 @@ export class LinkedList {
      * Snapshot the full list state as a flat Uint32Array.
      *
      * Layout:
-     *   [total_nodes, head_index,
+     *   [total_nodes, head_index, arena_base_ptr, node_size,
      *    arena_len, (value, next, alive)×arena_len,
      *    traversal_len, (index, action)×traversal_len ]
      *
      * All values are u32.  `alive` is 0 or 1.
+     * `arena_base_ptr` is the real WASM linear memory address of the arena.
+     * `node_size` is `size_of::<Node>()` in bytes.
      */
     snapshot(): Uint32Array;
     /**

@@ -14,7 +14,10 @@ export interface OperationResult {
 const EMPTY_SNAPSHOT: LinkedListSnapshot = {
 	length: 0,
 	head: null,
+	arenaBasePtr: 0,
+	nodeSize: 12,
 	arena: [],
+	allSlots: [],
 	ordered: [],
 	traversal: []
 };
@@ -32,6 +35,8 @@ export function createLinkedListStore() {
 	let activeStepIndex = $state(-1);
 	let animating = $state(false);
 	let animationSpeed = $state(200); // ms per step
+	let selectedIndex = $state<number | null>(null);
+	let blinking = $state(false);
 
 	async function initialize() {
 		await initEngine();
@@ -40,9 +45,10 @@ export function createLinkedListStore() {
 		ready = true;
 	}
 
-	function animateTraversal(steps: TraversalStep[]): Promise<void> {
+	function animateTraversal(steps: TraversalStep[], onComplete?: () => void): Promise<void> {
 		return new Promise((resolve) => {
 			if (steps.length === 0) {
+				onComplete?.();
 				resolve();
 				return;
 			}
@@ -55,6 +61,7 @@ export function createLinkedListStore() {
 				if (activeStepIndex >= steps.length) {
 					clearInterval(interval);
 					animating = false;
+					onComplete?.();
 					resolve();
 				}
 			}, animationSpeed);
@@ -79,10 +86,39 @@ export function createLinkedListStore() {
 
 	function deleteValue(value: number) {
 		if (!engine) return;
-		const { found, snapshot: snap } = engine.delete(value);
-		snapshot = snap;
+		// Capture pre-delete snapshot so the node stays visible during animation
+		const preSnap = engine.snap();
+		const { found, snapshot: postSnap } = engine.delete(value);
 		lastOp = { kind: 'delete', value, found };
-		animateTraversal(snap.traversal);
+
+		if (!found || postSnap.traversal.length === 0) {
+			snapshot = postSnap;
+			animateTraversal(postSnap.traversal);
+			return;
+		}
+
+		// Show pre-delete state (node still in ordered list) during traversal,
+		// then blink the deleted node before removing it.
+		snapshot = preSnap;
+		animateTraversal(postSnap.traversal, () => {
+			// Keep animating=true during blink phase
+			animating = true;
+			blinking = true;
+			const lastIdx = postSnap.traversal.length - 1;
+			let blinks = 0;
+			const blinkInterval = setInterval(() => {
+				activeStepIndex = blinks % 2 === 0 ? -1 : lastIdx;
+				blinks++;
+				if (blinks >= 6) {
+					clearInterval(blinkInterval);
+					animatingSteps = [];
+					activeStepIndex = -1;
+					animating = false;
+					blinking = false;
+					snapshot = postSnap;
+				}
+			}, 100);
+		});
 	}
 
 	function searchValue(value: number) {
@@ -124,6 +160,10 @@ export function createLinkedListStore() {
 		animationSpeed = ms;
 	}
 
+	function selectNode(index: number | null) {
+		selectedIndex = selectedIndex === index ? null : index;
+	}
+
 	function destroy() {
 		engine?.destroy();
 		engine = null;
@@ -139,6 +179,7 @@ export function createLinkedListStore() {
 		clear,
 		generateRandom,
 		setAnimationSpeed,
+		selectNode,
 		destroy,
 		get snapshot() { return snapshot; },
 		get ready() { return ready; },
@@ -147,5 +188,7 @@ export function createLinkedListStore() {
 		get activeStepIndex() { return activeStepIndex; },
 		get animating() { return animating; },
 		get animationSpeed() { return animationSpeed; },
+		get selectedIndex() { return selectedIndex; },
+		get blinking() { return blinking; },
 	};
 }
