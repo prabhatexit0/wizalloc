@@ -42,6 +42,10 @@ export interface LinkedListSnapshot {
 	length: number;
 	/** Arena index of the head node, or null */
 	head: number | null;
+	/** Real WASM linear memory address of the arena buffer */
+	arenaBasePtr: number;
+	/** Size of each Node struct in bytes (from Rust std::mem::size_of) */
+	nodeSize: number;
 	/** Live nodes in arena order */
 	arena: ListNode[];
 	/** Every slot in the arena (alive + dead) for memory layout view */
@@ -59,7 +63,7 @@ const NULL = 0xFFFFFFFF; // u32::MAX
  * a structured TypeScript object.
  *
  * Layout:
- *   [total_nodes, head_index,
+ *   [total_nodes, head_index, arena_base_ptr, node_size,
  *    arena_len, (value, next, alive)×arena_len,
  *    traversal_len, (index, action)×traversal_len ]
  */
@@ -68,6 +72,8 @@ export function decodeSnapshot(buf: Uint32Array | number[]): LinkedListSnapshot 
 	const length = buf[i++];
 	const rawHead = buf[i++];
 	const head = rawHead === NULL ? null : rawHead;
+	const arenaBasePtr = buf[i++];
+	const nodeSize = buf[i++];
 
 	const arenaLen = buf[i++];
 	const arena: ListNode[] = [];
@@ -109,5 +115,5 @@ export function decodeSnapshot(buf: Uint32Array | number[]): LinkedListSnapshot 
 		traversal.push({ index, action: action as StepAction });
 	}
 
-	return { length, head, arena, allSlots, ordered, traversal };
+	return { length, head, arenaBasePtr, nodeSize, arena, allSlots, ordered, traversal };
 }

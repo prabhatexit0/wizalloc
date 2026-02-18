@@ -14,6 +14,8 @@ export interface OperationResult {
 const EMPTY_SNAPSHOT: LinkedListSnapshot = {
 	length: 0,
 	head: null,
+	arenaBasePtr: 0,
+	nodeSize: 12,
 	arena: [],
 	allSlots: [],
 	ordered: [],

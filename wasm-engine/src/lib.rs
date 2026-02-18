@@ -243,21 +243,29 @@ impl LinkedList {
     /// Snapshot the full list state as a flat Uint32Array.
     ///
     /// Layout:
-    ///   [total_nodes, head_index,
+    ///   [total_nodes, head_index, arena_base_ptr, node_size,
     ///    arena_len, (value, next, alive)×arena_len,
     ///    traversal_len, (index, action)×traversal_len ]
     ///
     /// All values are u32.  `alive` is 0 or 1.
+    /// `arena_base_ptr` is the real WASM linear memory address of the arena.
+    /// `node_size` is `size_of::<Node>()` in bytes.
     pub fn snapshot(&self) -> Vec<u32> {
         let arena_len = self.arena.len();
         let trav_len = self.traversal.len();
-        // 2 header + 3*arena + 1 + 2*trav
-        let cap = 2 + 3 * arena_len + 1 + 2 * trav_len;
+        // 4 header + 3*arena + 1 + 2*trav
+        let cap = 4 + 3 * arena_len + 1 + 2 * trav_len;
         let mut buf = Vec::with_capacity(cap);
 
         // Header
         buf.push(self.len);
         buf.push(self.head);
+        buf.push(if arena_len > 0 {
+            self.arena.as_ptr() as u32
+        } else {
+            0
+        });
+        buf.push(std::mem::size_of::<Node>() as u32);
 
         // Arena
         buf.push(arena_len as u32);
@@ -326,7 +334,7 @@ mod tests {
         // Should be 10 -> 20 -> 30
         let snap = ll.snapshot();
         let head = snap[1] as usize;
-        let arena_start = 3; // after header(2) + arena_len(1)
+        let arena_start = 5; // after header(4) + arena_len(1)
         let first_val = snap[arena_start + head * 3];
         assert_eq!(first_val, 10);
     }

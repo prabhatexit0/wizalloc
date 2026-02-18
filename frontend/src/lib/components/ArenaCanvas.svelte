@@ -17,12 +17,9 @@
 	let viewW = $state(900);
 	let viewH = $state(300);
 
-	// Simulated memory layout: Node { value: u32, next: u32, alive: bool } = 12 bytes
-	const BASE_ADDR = 0x1000;
-	const NODE_SIZE = 12; // bytes per arena slot
-
 	function toHex(addr: number): string {
-		return '0x' + addr.toString(16).toUpperCase().padStart(4, '0');
+		const digits = addr > 0xFFFF ? 8 : 4;
+		return '0x' + addr.toString(16).toUpperCase().padStart(digits, '0');
 	}
 
 	let isMobile = $derived(viewW < 500);
@@ -251,9 +248,9 @@
 			ctx.textBaseline = 'top';
 			ctx.fillText(String(i), cell.x + 4, cell.y + 3);
 
-			// Memory address (top-right)
-			const startAddr = BASE_ADDR + i * NODE_SIZE;
-			const endAddr = startAddr + NODE_SIZE - 1;
+			// Memory address (top-right) — real WASM linear memory addresses
+			const startAddr = snapshot.arenaBasePtr + i * snapshot.nodeSize;
+			const endAddr = startAddr + snapshot.nodeSize - 1;
 			ctx.fillStyle = C.addrText;
 			ctx.font = fontAddr;
 			ctx.textAlign = 'right';
@@ -306,9 +303,9 @@
 		ctx.textAlign = 'left';
 		ctx.textBaseline = 'bottom';
 		const freeCount = slots.filter((s: ArenaSlot) => !s.alive).length;
-		const arenaStart = toHex(BASE_ADDR);
-		const arenaEnd = toHex(BASE_ADDR + slots.length * NODE_SIZE - 1);
-		const totalBytes = slots.length * NODE_SIZE;
+		const arenaStart = toHex(snapshot.arenaBasePtr);
+		const arenaEnd = toHex(snapshot.arenaBasePtr + slots.length * snapshot.nodeSize - 1);
+		const totalBytes = slots.length * snapshot.nodeSize;
 		const rangeStr = slots.length > 0 ? ` · ${arenaStart}..${arenaEnd} (${totalBytes}B)` : '';
 		ctx.fillText(`${slots.length} slots · ${slots.length - freeCount} alive · ${freeCount} free${rangeStr}`, 8, viewH - 8);
 		ctx.restore();

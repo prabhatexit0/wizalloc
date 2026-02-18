@@ -69,7 +69,7 @@
 			<div class="viz-panel">
 				<div class="section-header">
 					<span class="section-label">Memory Layout</span>
-					<span class="section-hint">arena allocation — contiguous slots with free-list recycling</span>
+					<span class="section-hint">arena allocation — real WASM linear memory addresses</span>
 				</div>
 				<ArenaCanvas
 					snapshot={store.snapshot}
