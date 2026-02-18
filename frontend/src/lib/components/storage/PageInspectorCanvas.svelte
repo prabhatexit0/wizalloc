@@ -15,17 +15,35 @@
 	const BYTE_H = 16;
 	const BYTE_GAP = 1;
 
+	function computeSlotsHeight(snap: NonNullable<typeof storageState.pageSnapshot>): number {
+		const sw = 70;
+		const sh = 16;
+		let slotX = PAD;
+		let rows = 1;
+		for (let i = 0; i < snap.slots.length; i++) {
+			slotX += sw + 3;
+			if (slotX + sw > width - PAD && i < snap.slots.length - 1) {
+				slotX = PAD;
+				rows++;
+			}
+		}
+		return rows * (sh + 3);
+	}
+
 	let canvasHeight = $derived.by(() => {
 		const snap = storageState.pageSnapshot;
 		if (!snap || width === 0) return viewportHeight;
+		const slotsH = computeSlotsHeight(snap);
+		const baseY = PAD + 48 + slotsH + 12; // after slots + gap
 		if (showHex) {
 			const bytesPerRow = Math.max(1, Math.floor((width - PAD * 2 - 50) / (BYTE_W + BYTE_GAP)));
 			const totalRows = Math.ceil(snap.rawBytes.length / bytesPerRow);
-			const hexY = HEADER_H + 20;
-			const contentH = hexY + totalRows * (BYTE_H + BYTE_GAP) + PAD;
+			const contentH = baseY + totalRows * (BYTE_H + BYTE_GAP) + PAD;
 			return Math.max(viewportHeight, contentH);
 		}
-		return viewportHeight;
+		// Layout mode: bar + legend + row info
+		const contentH = baseY + 28 + 22 + 30 + PAD;
+		return Math.max(viewportHeight, contentH);
 	});
 
 	let rafId = 0;
@@ -48,6 +66,7 @@
 
 	$effect(() => {
 		storageState.pageSnapshot;
+		storageState.selectedSlotId;
 		showHex;
 		canvasHeight;
 		scheduleRender();
@@ -68,7 +87,8 @@
 			ctx.fillStyle = 'rgba(255,255,255,0.3)';
 			ctx.font = `12px ${MONO}`;
 			ctx.textAlign = 'center';
-			ctx.fillText('Click a page to inspect', width / 2, viewportHeight / 2);
+			ctx.fillText('Select a page from the Buffer Pool or Disk', width / 2, viewportHeight / 2 - 8);
+			ctx.fillText('to inspect its internal layout', width / 2, viewportHeight / 2 + 8);
 			return;
 		}
 
@@ -91,22 +111,30 @@
 		// Slot table
 		ctx.fillText('Slot Array:', PAD, PAD + 40);
 		let slotX = PAD;
-		const slotY = PAD + 48;
+		let slotY = PAD + 48;
+		const sw = 70;
+		const sh = 16;
+		const selSlot = storageState.selectedSlotId;
 		for (let i = 0; i < snap.slots.length; i++) {
 			const s = snap.slots[i];
 			const isDead = s.length === 0;
-			const sw = 70;
-			const sh = 16;
+			const isSelected = selSlot === i;
 
-			ctx.fillStyle = isDead ? 'rgba(239,68,68,0.1)' : 'rgba(96,165,250,0.1)';
-			ctx.strokeStyle = isDead ? 'rgba(239,68,68,0.2)' : 'rgba(96,165,250,0.2)';
-			ctx.lineWidth = 1;
+			if (isSelected) {
+				ctx.fillStyle = 'rgba(0,200,255,0.15)';
+				ctx.strokeStyle = '#00d4ff';
+				ctx.lineWidth = 2;
+			} else {
+				ctx.fillStyle = isDead ? 'rgba(239,68,68,0.1)' : 'rgba(96,165,250,0.1)';
+				ctx.strokeStyle = isDead ? 'rgba(239,68,68,0.2)' : 'rgba(96,165,250,0.2)';
+				ctx.lineWidth = 1;
+			}
 			ctx.beginPath();
 			ctx.roundRect(slotX, slotY, sw, sh, 2);
 			ctx.fill();
 			ctx.stroke();
 
-			ctx.fillStyle = isDead ? 'rgba(239,68,68,0.6)' : 'rgba(255,255,255,0.6)';
+			ctx.fillStyle = isSelected ? '#00d4ff' : isDead ? 'rgba(239,68,68,0.6)' : 'rgba(255,255,255,0.6)';
 			ctx.font = `9px ${MONO}`;
 			ctx.textAlign = 'center';
 			ctx.fillText(
@@ -117,20 +145,21 @@
 			slotX += sw + 3;
 			if (slotX + sw > width - PAD) {
 				slotX = PAD;
-				break;
+				slotY += sh + 3;
 			}
 		}
+		const slotsEndY = slotY + sh;
 
 		if (showHex) {
-			renderHexView(ctx, snap);
+			renderHexView(ctx, snap, slotsEndY);
 		} else {
-			renderBarView(ctx, snap);
+			renderBarView(ctx, snap, slotsEndY);
 		}
 	}
 
-	function renderBarView(ctx: CanvasRenderingContext2D, snap: NonNullable<typeof storageState.pageSnapshot>) {
+	function renderBarView(ctx: CanvasRenderingContext2D, snap: NonNullable<typeof storageState.pageSnapshot>, slotsEndY: number) {
 		// Visual bar showing page layout
-		const barY = HEADER_H + 20;
+		const barY = slotsEndY + 12;
 		const barH = 28;
 		const barW = width - PAD * 2;
 		const ps = snap.pageSize;
@@ -211,10 +240,36 @@
 			ctx.fillText(l.label, lx + 11, legendY + 7);
 			lx += ctx.measureText(l.label).width + 22;
 		}
+
+		// Highlight selected slot's tuple byte range in the bar
+		const selSlot = storageState.selectedSlotId;
+		if (selSlot !== null && selSlot < snap.slots.length) {
+			const slot = snap.slots[selSlot];
+			if (slot.length > 0) {
+				const selX = PAD + slot.offset * scale;
+				const selW = slot.length * scale;
+				ctx.strokeStyle = '#00d4ff';
+				ctx.lineWidth = 2;
+				ctx.beginPath();
+				ctx.roundRect(selX, barY, Math.max(selW, 2), barH, 2);
+				ctx.stroke();
+
+				// Row memory footprint info line
+				const infoY = legendY + 16;
+				const pct = ((slot.length / ps) * 100).toFixed(1);
+				ctx.fillStyle = '#00d4ff';
+				ctx.font = `9px ${MONO}`;
+				ctx.textAlign = 'left';
+				ctx.fillText(
+					`Row ${snap.pageId}:${selSlot} → Page ${snap.pageId}, Slot [${selSlot}], offset ${slot.offset}, ${slot.length} bytes (${pct}% of page)`,
+					PAD, infoY
+				);
+			}
+		}
 	}
 
-	function renderHexView(ctx: CanvasRenderingContext2D, snap: NonNullable<typeof storageState.pageSnapshot>) {
-		const hexY = HEADER_H + 20;
+	function renderHexView(ctx: CanvasRenderingContext2D, snap: NonNullable<typeof storageState.pageSnapshot>, slotsEndY: number) {
+		const hexY = slotsEndY + 12;
 		const bytes = snap.rawBytes;
 		const bytesPerRow = Math.max(1, Math.floor((width - PAD * 2 - 50) / (BYTE_W + BYTE_GAP)));
 		const totalRows = Math.ceil(bytes.length / bytesPerRow);

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { storageState } from '$lib/stores/storage.svelte.js';
+	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	import type { EngineConfig, ColumnDef } from '$lib/wasm/storage-types.js';
+	import { formatBytes } from '$lib/wasm/storage-types.js';
 
 	// ── Engine config form ──
 	let pageSize = $state(128);
@@ -33,7 +35,46 @@
 	// ── Row ID input ──
 	let rowIdInput = $state('');
 
+	// ── Collapsible state ──
+	let quickFillOpen = $state(true);
+	let createTableOpen = $state(true);
+	let tableOpsOpen = $state(true);
+	let scanResultsOpen = $state(true);
+
+	// ── Search filter ──
+	let filterText = $state('');
+
 	const PAGE_PRESETS = [64, 128, 256, 512, 1024, 4096];
+
+	// Auto-collapse Quick Fill and Create Table once a table exists
+	let hasAutoCollapsed = $state(false);
+	$effect(() => {
+		if (storageState.tables.length > 0 && !hasAutoCollapsed) {
+			quickFillOpen = false;
+			createTableOpen = false;
+			hasAutoCollapsed = true;
+		}
+	});
+
+	// Filtered scan results
+	let filteredResults = $derived.by(() => {
+		const rows = storageState.scanResults;
+		if (!filterText.trim()) return rows;
+		const q = filterText.trim().toLowerCase();
+		return rows.filter(row => {
+			if (row.row_id.toLowerCase().includes(q)) return true;
+			return row.values.some(v => String(v ?? 'NULL').toLowerCase().includes(q));
+		});
+	});
+
+	// Format column type for display
+	function formatColType(type: string | { VarChar: number } | { Blob: number }): string {
+		if (typeof type === 'object') {
+			if ('VarChar' in type) return `VarChar(${type.VarChar})`;
+			if ('Blob' in type) return `Blob(${type.Blob})`;
+		}
+		return String(type);
+	}
 
 	function initEngine() {
 		const config: EngineConfig = {
@@ -95,6 +136,11 @@
 		}
 	}
 
+	function doGet() {
+		if (!storageState.selectedTable || !rowIdInput.trim()) return;
+		storageState.getRow(storageState.selectedTable, rowIdInput.trim());
+	}
+
 	function doDelete() {
 		if (!storageState.selectedTable || !rowIdInput.trim()) return;
 		storageState.deleteRow(storageState.selectedTable, rowIdInput.trim());
@@ -102,7 +148,41 @@
 
 	function doScan() {
 		if (!storageState.selectedTable) return;
+		filterText = '';
 		storageState.scan(storageState.selectedTable);
+		scanResultsOpen = true;
+	}
+
+	function handleRowClick(rowId: string) {
+		storageState.clearCellSelection();
+		storageState.selectRowFromScan(rowId);
+	}
+
+	function handleCellClick(e: MouseEvent, rowId: string, colIndex: number, value: unknown) {
+		e.stopPropagation();
+		storageState.selectCell(rowId, colIndex, value);
+	}
+
+	function estimateByteSize(colType: string | { VarChar: number } | { Blob: number }, value: unknown): number {
+		if (value === null) return 1; // null bitmap bit, but at least 1 byte for the indicator
+		if (typeof colType === 'object') {
+			if ('VarChar' in colType) return 2 + new TextEncoder().encode(String(value)).length; // 2-byte len prefix + UTF-8
+			if ('Blob' in colType) return 2 + String(value).length / 2; // 2-byte len prefix + raw bytes
+		}
+		switch (colType) {
+			case 'Int32': case 'UInt32': return 4;
+			case 'Float64': return 8;
+			case 'Bool': return 1;
+			default: return 0;
+		}
+	}
+
+	function colTypeName(colType: string | { VarChar: number } | { Blob: number }): string {
+		if (typeof colType === 'object') {
+			if ('VarChar' in colType) return 'VarChar';
+			if ('Blob' in colType) return 'Blob';
+		}
+		return String(colType);
 	}
 </script>
 
@@ -111,6 +191,7 @@
 		<!-- Engine Configuration -->
 		<div class="section">
 			<h3>Engine Configuration</h3>
+			<p class="desc">Configure the storage engine's page size, buffer pool capacity, and disk size</p>
 
 			<span class="field-label">Page Size</span>
 			<div class="presets">
@@ -156,8 +237,11 @@
 		</div>
 
 		<!-- Quick Fill -->
-		<div class="section">
-			<h3>Quick Fill</h3>
+		<CollapsibleSection
+			title="Quick Fill"
+			bind:open={quickFillOpen}
+			description="Create a table and populate it with random data to explore the storage engine"
+		>
 			<input type="text" bind:value={qfTableName} placeholder="Table name" class="text-input" />
 			<div class="columns-list">
 				{#each qfColumns as col, i}
@@ -200,11 +284,13 @@
 			</div>
 
 			<button class="btn primary" onclick={doQuickFill} disabled={!qfTableName.trim()}>Create &amp; Fill</button>
-		</div>
+		</CollapsibleSection>
 
 		<!-- Create Table -->
-		<div class="section">
-			<h3>Create Table</h3>
+		<CollapsibleSection
+			title="Create Table"
+			bind:open={createTableOpen}
+		>
 			<input type="text" bind:value={newTableName} placeholder="Table name" class="text-input" />
 			<div class="columns-list">
 				{#each newColumns as col, i}
@@ -233,12 +319,15 @@
 				<button class="btn small" onclick={addColumn}>+ Column</button>
 				<button class="btn small primary" onclick={createTable} disabled={!newTableName.trim()}>Create</button>
 			</div>
-		</div>
+		</CollapsibleSection>
 
-		<!-- Table Selector -->
+		<!-- Table Operations -->
 		{#if storageState.tables.length > 0}
-			<div class="section">
-				<h3>Table</h3>
+			<CollapsibleSection
+				title="Table"
+				bind:open={tableOpsOpen}
+				description="Insert, delete, and scan rows. Row IDs are in page:slot format"
+			>
 				<div class="table-tabs">
 					{#each storageState.tables as t}
 						<button
@@ -250,6 +339,41 @@
 				</div>
 
 				{#if storageState.selectedTable}
+					<!-- Table Info Panel -->
+					{#if storageState.tableInfo}
+						{@const info = storageState.tableInfo}
+						<div class="table-info">
+							<div class="schema-pills">
+								{#each info.columns as col}
+									<span class="schema-pill">
+										{col.name}: {formatColType(col.type)}
+									</span>
+								{/each}
+							</div>
+							<div class="table-stats">
+								<span>{info.rowCount} rows</span>
+								<span class="dot-sep"></span>
+								<span>{info.pageIds.length} pages</span>
+								<span class="dot-sep"></span>
+								<span>{formatBytes(info.pageIds.length * (storageState.config?.page_size ?? 0))}</span>
+							</div>
+							{#if info.pageIds.length > 0}
+								<div class="page-chain">
+									{#each info.pageIds as pgId, i}
+										<button
+											class="page-link"
+											class:active={storageState.selectedPageId === pgId}
+											onclick={() => storageState.selectPage(pgId)}
+										>Pg {pgId}</button>
+										{#if i < info.pageIds.length - 1}
+											<span class="chain-arrow">&rarr;</span>
+										{/if}
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/if}
+
 					<!-- Insert -->
 					<span class="field-label">Insert Row</span>
 					<div class="insert-row">
@@ -271,10 +395,78 @@
 							bind:value={rowIdInput}
 							placeholder="0:0"
 							class="text-input"
-							onkeydown={(e) => e.key === 'Enter' && doDelete()}
+							onkeydown={(e) => e.key === 'Enter' && doGet()}
 						/>
+						<button class="btn small" onclick={doGet}>Get</button>
 						<button class="btn small danger" onclick={doDelete}>Delete</button>
 					</div>
+
+					<!-- Get Row Result -->
+					{#if storageState.getRowResult}
+						{@const result = storageState.getRowResult}
+						<div class="get-result">
+							<div class="get-result-header">
+								<span class="get-result-label">Row {result.rowId}</span>
+								<button class="btn-icon get-result-close" onclick={() => storageState.clearGetResult()}>&times;</button>
+							</div>
+							<div class="results-scroll get-result-scroll">
+								<table class="results-table">
+									<thead>
+										<tr>
+											<th>RowID</th>
+											{#each storageState.scanColumns as colName}
+												<th>{colName}</th>
+											{:else}
+												{#each result.values as _, i}
+													<th>col{i}</th>
+												{/each}
+											{/each}
+										</tr>
+									</thead>
+									<tbody>
+										<tr class="clickable-row selected-row">
+											<td class="rowid">{result.rowId}</td>
+											{#each result.values as val, colIdx}
+												<td
+													class="clickable-cell"
+													class:selected-cell={storageState.selectedCell?.rowId === result.rowId && storageState.selectedCell?.colIndex === colIdx}
+													onclick={(e) => handleCellClick(e, result.rowId, colIdx, val)}
+												>{val === null ? 'NULL' : String(val)}</td>
+											{/each}
+										</tr>
+									</tbody>
+								</table>
+							</div>
+							<!-- Cell info for get result -->
+							{#if storageState.selectedCell && storageState.selectedCell.rowId === result.rowId && storageState.tableInfo}
+								{@const cell = storageState.selectedCell}
+								{@const col = storageState.tableInfo.columns[cell.colIndex]}
+								{@const parts = cell.rowId.split(':')}
+								{@const pgId = parseInt(parts[0], 10)}
+								{@const slotIdx = parseInt(parts[1], 10)}
+								{@const byteSize = col ? estimateByteSize(col.type, cell.value) : 0}
+								{@const snap = storageState.pageSnapshot}
+								{@const slot = snap && slotIdx < snap.slots.length ? snap.slots[slotIdx] : null}
+								<div class="cell-info cell-info-inline">
+									<button class="cell-info-close" onclick={() => storageState.clearCellSelection()}>&times;</button>
+									<div class="cell-info-header">
+										<span class="cell-info-value">"{cell.value === null ? 'NULL' : String(cell.value)}"</span>
+									</div>
+									<div class="cell-info-details">
+										{#if col}
+											<span>Column: <strong>{col.name}</strong> ({formatColType(col.type)})</span>
+											<span>Encoded size: ~{byteSize}B as {colTypeName(col.type)}{typeof col.type === 'object' && 'VarChar' in col.type ? ` (2B len + ${byteSize - 2}B UTF-8)` : ''}</span>
+										{/if}
+										<span>Location: Page {pgId}, Slot [{slotIdx}]{#if slot && slot.length > 0}, tuple offset {slot.offset}, {slot.length}B total{/if}</span>
+										{#if col}
+											{@const offsetInTuple = storageState.tableInfo.columns.slice(0, cell.colIndex).reduce((acc, c) => acc + estimateByteSize(c.type, null), 0)}
+											<span>Field offset in tuple: ~byte {offsetInTuple}</span>
+										{/if}
+									</div>
+								</div>
+							{/if}
+						</div>
+					{/if}
 
 					<!-- Scan -->
 					<div class="btn-row">
@@ -283,36 +475,100 @@
 						<button class="btn small danger" onclick={() => storageState.dropTable(storageState.selectedTable!)}>Drop</button>
 					</div>
 				{/if}
-			</div>
+			</CollapsibleSection>
 		{/if}
 
 		<!-- Scan Results -->
 		{#if storageState.scanResults.length > 0}
-			<div class="section results">
-				<h3>Results ({storageState.scanResults.length})</h3>
+			<CollapsibleSection
+				title="Scan Results"
+				bind:open={scanResultsOpen}
+				badge={filteredResults.length === storageState.scanResults.length ? String(storageState.scanResults.length) : `${filteredResults.length}/${storageState.scanResults.length}`}
+				description="Click any row to see which page it lives on and inspect its memory layout"
+			>
+				<!-- Filter box -->
+				<div class="filter-box">
+					<input
+						type="text"
+						bind:value={filterText}
+						placeholder="Filter rows..."
+						class="text-input filter-input"
+					/>
+					{#if filterText.trim()}
+						<span class="filter-count">
+							Showing {filteredResults.length} of {storageState.scanResults.length} rows
+						</span>
+					{/if}
+				</div>
+
 				<div class="results-scroll">
 					<table class="results-table">
 						<thead>
 							<tr>
 								<th>RowID</th>
-								{#each storageState.scanResults[0]?.values ?? [] as _, i}
-									<th>col{i}</th>
+								{#each storageState.scanColumns as colName}
+									<th>{colName}</th>
+								{:else}
+									{#each storageState.scanResults[0]?.values ?? [] as _, i}
+										<th>col{i}</th>
+									{/each}
 								{/each}
 							</tr>
 						</thead>
 						<tbody>
-							{#each storageState.scanResults as row}
-								<tr>
+							{#each filteredResults as row}
+								{@const isRowSelected = storageState.selectedSlotId !== null && (() => {
+									const parts = row.row_id.split(':');
+									return parseInt(parts[0], 10) === storageState.selectedPageId && parseInt(parts[1], 10) === storageState.selectedSlotId;
+								})()}
+								<tr
+									class="clickable-row"
+									class:selected-row={isRowSelected}
+									onclick={() => handleRowClick(row.row_id)}
+								>
 									<td class="rowid">{row.row_id}</td>
-									{#each row.values as val}
-										<td>{val === null ? 'NULL' : String(val)}</td>
+									{#each row.values as val, colIdx}
+										<td
+											class="clickable-cell"
+											class:selected-cell={storageState.selectedCell?.rowId === row.row_id && storageState.selectedCell?.colIndex === colIdx}
+											onclick={(e) => handleCellClick(e, row.row_id, colIdx, val)}
+										>{val === null ? 'NULL' : String(val)}</td>
 									{/each}
 								</tr>
 							{/each}
 						</tbody>
 					</table>
 				</div>
-			</div>
+
+				<!-- Cell storage info -->
+				{#if storageState.selectedCell && storageState.tableInfo}
+					{@const cell = storageState.selectedCell}
+					{@const col = storageState.tableInfo.columns[cell.colIndex]}
+					{@const parts = cell.rowId.split(':')}
+					{@const pgId = parseInt(parts[0], 10)}
+					{@const slotIdx = parseInt(parts[1], 10)}
+					{@const byteSize = col ? estimateByteSize(col.type, cell.value) : 0}
+					{@const snap = storageState.pageSnapshot}
+					{@const slot = snap && slotIdx < snap.slots.length ? snap.slots[slotIdx] : null}
+					<div class="cell-info">
+						<button class="cell-info-close" onclick={() => storageState.clearCellSelection()}>&times;</button>
+						<div class="cell-info-header">
+							<span class="cell-info-value">"{cell.value === null ? 'NULL' : String(cell.value)}"</span>
+						</div>
+						<div class="cell-info-details">
+							{#if col}
+								<span>Column: <strong>{col.name}</strong> ({formatColType(col.type)})</span>
+								<span>Encoded size: ~{byteSize}B as {colTypeName(col.type)}{typeof col.type === 'object' && 'VarChar' in col.type ? ` (2B len + ${byteSize - 2}B UTF-8)` : ''}</span>
+							{/if}
+							<span>Location: Page {pgId}, Slot [{slotIdx}]{#if slot && slot.length > 0}, tuple offset {slot.offset}, {slot.length}B total{/if}</span>
+							{#if col}
+								{@const offsetInTuple = storageState.tableInfo.columns.slice(0, cell.colIndex).reduce((acc, c) => acc + estimateByteSize(c.type, null), 0)}
+								<span>Field offset in tuple: ~byte {offsetInTuple}</span>
+							{/if}
+						</div>
+					</div>
+				{/if}
+			</CollapsibleSection>
 		{/if}
 	{/if}
 
@@ -348,6 +604,13 @@
 		color: rgba(255, 255, 255, 0.7);
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
+	}
+	.desc {
+		margin: 0;
+		font-size: 10px;
+		font-style: italic;
+		color: rgba(255, 255, 255, 0.35);
+		line-height: 1.4;
 	}
 	.field-label {
 		font-size: 10px;
@@ -446,7 +709,7 @@
 		color: rgba(255, 255, 255, 0.5); cursor: pointer;
 	}
 	.nullable-check input { width: 12px; height: 12px; }
-	.table-tabs { display: flex; gap: 2px; }
+	.table-tabs { display: flex; gap: 2px; flex-wrap: wrap; }
 	.tab {
 		padding: 3px 8px;
 		border: 1px solid rgba(255, 255, 255, 0.1);
@@ -459,8 +722,87 @@
 	}
 	.tab.active { background: #007acc; color: #fff; border-color: #007acc; }
 	.insert-row { display: flex; gap: 4px; }
-	.results { max-height: 200px; }
-	.results-scroll { overflow: auto; max-height: 160px; }
+
+	/* Table Info Panel */
+	.table-info {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 6px;
+		background: rgba(255, 255, 255, 0.02);
+		border: 1px solid rgba(255, 255, 255, 0.06);
+		border-radius: 4px;
+	}
+	.schema-pills {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 3px;
+	}
+	.schema-pill {
+		font-size: 9px;
+		padding: 1px 5px;
+		border-radius: 3px;
+		background: rgba(96, 165, 250, 0.1);
+		color: rgba(96, 165, 250, 0.8);
+		border: 1px solid rgba(96, 165, 250, 0.15);
+	}
+	.table-stats {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 10px;
+		color: rgba(255, 255, 255, 0.5);
+	}
+	.dot-sep::before {
+		content: '\00B7';
+		color: rgba(255, 255, 255, 0.3);
+	}
+	.page-chain {
+		display: flex;
+		align-items: center;
+		gap: 3px;
+		flex-wrap: wrap;
+	}
+	.page-link {
+		font-size: 9px;
+		padding: 1px 5px;
+		border-radius: 3px;
+		background: rgba(74, 222, 128, 0.08);
+		border: 1px solid rgba(74, 222, 128, 0.15);
+		color: rgba(74, 222, 128, 0.7);
+		cursor: pointer;
+		font-family: inherit;
+	}
+	.page-link:hover {
+		background: rgba(74, 222, 128, 0.15);
+		color: rgba(74, 222, 128, 0.9);
+	}
+	.page-link.active {
+		background: rgba(192, 132, 252, 0.15);
+		border-color: rgba(192, 132, 252, 0.3);
+		color: #c084fc;
+	}
+	.chain-arrow {
+		font-size: 9px;
+		color: rgba(255, 255, 255, 0.25);
+	}
+
+	/* Filter box */
+	.filter-box {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+	}
+	.filter-input {
+		font-size: 10px;
+	}
+	.filter-count {
+		font-size: 9px;
+		color: rgba(255, 255, 255, 0.4);
+	}
+
+	/* Scan Results */
+	.results-scroll { overflow: auto; max-height: 200px; }
 	.results-table {
 		width: 100%;
 		border-collapse: collapse;
@@ -473,12 +815,116 @@
 		white-space: nowrap;
 	}
 	.results-table th {
-		background: rgba(255, 255, 255, 0.05);
-		color: rgba(255, 255, 255, 0.6);
+		background: #2a2a2a;
+		color: rgba(255, 255, 255, 0.8);
 		position: sticky;
 		top: 0;
+		z-index: 1;
+		font-weight: 600;
 	}
 	.rowid { color: #60a5fa; }
+	.clickable-row {
+		cursor: pointer;
+	}
+	.clickable-row:hover {
+		background: rgba(255, 255, 255, 0.05);
+	}
+	.selected-row {
+		background: rgba(0, 212, 255, 0.08) !important;
+		outline: 1px solid rgba(0, 212, 255, 0.2);
+	}
+	.clickable-cell {
+		cursor: pointer;
+		transition: background 0.1s;
+	}
+	.clickable-cell:hover {
+		background: rgba(192, 132, 252, 0.12);
+	}
+	.selected-cell {
+		background: rgba(192, 132, 252, 0.18) !important;
+		outline: 1px solid rgba(192, 132, 252, 0.4);
+	}
+
+	/* Get Row Result */
+	.get-result {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 6px;
+		background: rgba(96, 165, 250, 0.04);
+		border: 1px solid rgba(96, 165, 250, 0.15);
+		border-radius: 4px;
+	}
+	.get-result-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+	.get-result-label {
+		font-size: 9px;
+		color: #60a5fa;
+		font-weight: 600;
+	}
+	.get-result-close {
+		font-size: 12px;
+		color: rgba(255, 255, 255, 0.3);
+		padding: 0 2px;
+	}
+	.get-result-close:hover { color: rgba(255, 255, 255, 0.6); }
+	.get-result-scroll {
+		max-height: 60px;
+	}
+	.cell-info-inline {
+		margin-top: 2px;
+	}
+
+	/* Cell Info Panel */
+	.cell-info {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 6px 8px;
+		background: rgba(192, 132, 252, 0.06);
+		border: 1px solid rgba(192, 132, 252, 0.2);
+		border-radius: 4px;
+	}
+	.cell-info-close {
+		position: absolute;
+		top: 3px;
+		right: 5px;
+		background: none;
+		border: none;
+		color: rgba(255, 255, 255, 0.4);
+		cursor: pointer;
+		font-size: 13px;
+		line-height: 1;
+		padding: 0;
+	}
+	.cell-info-close:hover { color: rgba(255, 255, 255, 0.7); }
+	.cell-info-header {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.cell-info-value {
+		font-size: 11px;
+		font-weight: 600;
+		color: #c084fc;
+		word-break: break-all;
+	}
+	.cell-info-details {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		font-size: 9px;
+		color: rgba(255, 255, 255, 0.55);
+	}
+	.cell-info-details strong {
+		color: rgba(255, 255, 255, 0.8);
+		font-weight: 600;
+	}
+
 	.status {
 		padding: 4px 8px;
 		border-radius: 4px;

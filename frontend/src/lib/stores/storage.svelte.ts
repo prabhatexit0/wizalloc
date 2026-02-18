@@ -4,9 +4,11 @@ import type {
 	BufferPoolSnapshot,
 	DiskSnapshot,
 	PageSnapshot,
+	TableInfo,
 	ColumnDef,
 	ScanRow,
 } from '$lib/wasm/storage-types.js';
+import { formatBytes } from '$lib/wasm/storage-types.js';
 
 // ── Reactive state using Svelte 5 runes ────────────────────────────
 
@@ -19,6 +21,11 @@ let pageSnap: PageSnapshot | null = $state(null);
 let tables: string[] = $state([]);
 let selectedTable: string | null = $state(null);
 let scanResults: ScanRow[] = $state([]);
+let scanColumns: string[] = $state([]);
+let tableInfo: TableInfo | null = $state(null);
+let selectedSlotId: number | null = $state(null);
+let selectedCell: { rowId: string; colIndex: number; value: unknown } | null = $state(null);
+let getRowResult: { rowId: string; values: unknown[] } | null = $state(null);
 let statusMsg: string = $state('');
 let statusType: 'info' | 'success' | 'error' = $state('info');
 let wasmReady = $state(false);
@@ -30,6 +37,9 @@ function refreshSnapshots() {
 	diskSnap = engine.snapshotDisk();
 	if (selectedPageId !== null) {
 		pageSnap = engine.snapshotPage(selectedPageId);
+	}
+	if (selectedTable) {
+		tableInfo = engine.snapshotTable(selectedTable);
 	}
 }
 
@@ -94,6 +104,11 @@ export const storageState = {
 	get tables() { return tables; },
 	get selectedTable() { return selectedTable; },
 	get scanResults() { return scanResults; },
+	get scanColumns() { return scanColumns; },
+	get tableInfo() { return tableInfo; },
+	get selectedSlotId() { return selectedSlotId; },
+	get selectedCell() { return selectedCell; },
+	get getRowResult() { return getRowResult; },
 	get statusMsg() { return statusMsg; },
 	get statusType() { return statusType; },
 	get wasmReady() { return wasmReady; },
@@ -114,6 +129,11 @@ export const storageState = {
 		tables = [];
 		selectedTable = null;
 		scanResults = [];
+		scanColumns = [];
+		tableInfo = null;
+		selectedSlotId = null;
+		selectedCell = null;
+		getRowResult = null;
 		selectedPageId = null;
 		pageSnap = null;
 		refreshSnapshots();
@@ -134,6 +154,11 @@ export const storageState = {
 		tables = [];
 		selectedTable = null;
 		scanResults = [];
+		scanColumns = [];
+		tableInfo = null;
+		selectedSlotId = null;
+		selectedCell = null;
+		getRowResult = null;
 		setStatus('Engine reset', 'info');
 	},
 
@@ -158,6 +183,11 @@ export const storageState = {
 			selectedTable = tables.length > 0 ? tables[0] : null;
 		}
 		scanResults = [];
+		scanColumns = [];
+		tableInfo = selectedTable && engine ? engine.snapshotTable(selectedTable) : null;
+		selectedSlotId = null;
+		selectedCell = null;
+		getRowResult = null;
 		refreshSnapshots();
 		setStatus(`Table '${name}' dropped`, 'success');
 	},
@@ -165,6 +195,13 @@ export const storageState = {
 	selectTable(name: string) {
 		selectedTable = name;
 		scanResults = [];
+		scanColumns = [];
+		selectedSlotId = null;
+		selectedCell = null;
+		getRowResult = null;
+		if (engine) {
+			tableInfo = engine.snapshotTable(name);
+		}
 	},
 
 	insert(tableName: string, values: unknown[]) {
@@ -172,7 +209,15 @@ export const storageState = {
 		try {
 			const rowId = engine.insert(tableName, values);
 			refreshSnapshots();
-			setStatus(`Inserted row ${rowId}`, 'success');
+			// Richer status: show page info if available
+			const parts = rowId.split(':');
+			const pgId = parseInt(parts[0], 10);
+			const snap = engine.snapshotPage(pgId);
+			if (snap) {
+				setStatus(`Inserted row ${rowId} on Page ${pgId} (${snap.freeSpace}B free remaining)`, 'success');
+			} else {
+				setStatus(`Inserted row ${rowId}`, 'success');
+			}
 		} catch (e: unknown) {
 			setStatus(String(e), 'error');
 		}
@@ -183,25 +228,76 @@ export const storageState = {
 		try {
 			const ok = engine.delete(tableName, rowId);
 			refreshSnapshots();
-			setStatus(ok ? `Deleted row ${rowId}` : 'Row not found', ok ? 'success' : 'error');
+			setStatus(
+				ok ? `Deleted row ${rowId} — slot tombstoned (space not yet reclaimed)` : 'Row not found',
+				ok ? 'success' : 'error'
+			);
 		} catch (e: unknown) {
 			setStatus(String(e), 'error');
 		}
 	},
 
-	getRow(tableName: string, rowId: string): unknown[] | null {
-		if (!engine) return null;
+	getRow(tableName: string, rowId: string) {
+		if (!engine) return;
 		try {
-			return engine.get(tableName, rowId);
-		} catch {
-			return null;
+			const values = engine.get(tableName, rowId);
+			getRowResult = { rowId, values };
+			// Ensure column names are available
+			if (scanColumns.length === 0) {
+				const schema = engine.tableSchema(tableName);
+				scanColumns = schema ? schema.columns.map(c => c.name) : [];
+			}
+			// Also navigate to its page/slot
+			const parts = rowId.split(':');
+			if (parts.length === 2) {
+				const pgId = parseInt(parts[0], 10);
+				const slotIdx = parseInt(parts[1], 10);
+				if (!isNaN(pgId) && !isNaN(slotIdx)) {
+					selectedPageId = pgId;
+					pageSnap = engine.snapshotPage(pgId);
+					selectedSlotId = slotIdx;
+				}
+			}
+			refreshSnapshots();
+			setStatus(`Got row ${rowId}`, 'success');
+		} catch (e: unknown) {
+			getRowResult = null;
+			setStatus(String(e), 'error');
 		}
+	},
+
+	selectCell(rowId: string, colIndex: number, value: unknown) {
+		selectedCell = { rowId, colIndex, value };
+		// Also navigate to the row's page/slot
+		const parts = rowId.split(':');
+		if (parts.length === 2) {
+			const pgId = parseInt(parts[0], 10);
+			const slotIdx = parseInt(parts[1], 10);
+			if (!isNaN(pgId) && !isNaN(slotIdx)) {
+				selectedPageId = pgId;
+				if (engine) {
+					pageSnap = engine.snapshotPage(pgId);
+				}
+				selectedSlotId = slotIdx;
+			}
+		}
+	},
+
+	clearCellSelection() {
+		selectedCell = null;
+	},
+
+	clearGetResult() {
+		getRowResult = null;
+		selectedCell = null;
 	},
 
 	scan(tableName: string) {
 		if (!engine) return;
 		try {
 			scanResults = engine.scan(tableName);
+			const schema = engine.tableSchema(tableName);
+			scanColumns = schema ? schema.columns.map(c => c.name) : [];
 			refreshSnapshots();
 			setStatus(`Scanned ${scanResults.length} rows`, 'success');
 		} catch (e: unknown) {
@@ -223,6 +319,26 @@ export const storageState = {
 		engine.flushPage(pageId);
 		refreshSnapshots();
 		setStatus(`Flushed page ${pageId}`, 'success');
+	},
+
+	selectSlot(slotId: number | null) {
+		selectedSlotId = slotId;
+	},
+
+	selectRowFromScan(rowId: string) {
+		// rowId is in "pageId:slotId" format
+		const parts = rowId.split(':');
+		if (parts.length !== 2) return;
+		const pgId = parseInt(parts[0], 10);
+		const slotIdx = parseInt(parts[1], 10);
+		if (isNaN(pgId) || isNaN(slotIdx)) return;
+
+		// Select the page and slot
+		selectedPageId = pgId;
+		if (engine) {
+			pageSnap = engine.snapshotPage(pgId);
+		}
+		selectedSlotId = slotIdx;
 	},
 
 	flushAll() {

@@ -18,10 +18,6 @@
 		{@render children()}
 	</main>
 
-	<footer>
-		<span>Rust/WASM</span>
-		<span>Svelte 5</span>
-	</footer>
 </div>
 
 <style>
@@ -87,31 +83,11 @@
 		display: flex;
 		flex-direction: column;
 	}
-	footer {
-		height: 22px;
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		padding: 0 16px;
-		padding-left: max(16px, env(safe-area-inset-left, 0px));
-		padding-bottom: env(safe-area-inset-bottom, 0px);
-		background: #007acc;
-		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-		font-size: 11px;
-		color: #fff;
-		flex-shrink: 0;
-	}
-
 	@media (max-width: 640px) {
 		header {
 			padding: 0 12px;
 			padding-left: max(12px, env(safe-area-inset-left, 0px));
 			padding-right: max(12px, env(safe-area-inset-right, 0px));
-		}
-		footer {
-			padding: 0 12px;
-			padding-left: max(12px, env(safe-area-inset-left, 0px));
-			padding-bottom: env(safe-area-inset-bottom, 0px);
 		}
 	}
 </style>
