@@ -265,23 +265,23 @@
 		min-width: 0;
 	}
 
-	/* Mobile: vertically stacked collapsible panes */
+	/* Mobile: vertically stacked collapsible panes, scrollable */
 	.mobile-viz {
 		flex-direction: column;
+		overflow-y: auto;
 	}
 	.mobile-pane {
 		display: flex;
 		flex-direction: column;
-		min-height: 0;
 		overflow: hidden;
 		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		flex-shrink: 0;
 	}
 	.mobile-pane:not(.collapsed) {
-		flex: 1 1 0%;
-		min-height: 120px;
+		height: 50vh;
 	}
 	.mobile-pane.collapsed {
-		flex: 0 0 auto;
+		height: auto;
 	}
 
 	@media (max-width: 768px) {
