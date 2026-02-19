@@ -248,3 +248,109 @@ export function formatBytes(n: number): string {
 	if (n < 1024) return `${n}B`;
 	return `${(n / 1024).toFixed(1)}KB`;
 }
+
+// ── CSV utilities ──────────────────────────────────────────────────
+
+export function parseCSV(text: string): { headers: string[]; rows: string[][] } {
+	// Strip BOM, normalize line endings
+	let src = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+	// Trim trailing empty lines
+	src = src.replace(/\n+$/, '');
+
+	const lines: string[][] = [];
+	let i = 0;
+
+	while (i < src.length) {
+		const row: string[] = [];
+		while (i < src.length) {
+			if (src[i] === '"') {
+				// Quoted field
+				i++; // skip opening quote
+				let field = '';
+				while (i < src.length) {
+					if (src[i] === '"') {
+						if (i + 1 < src.length && src[i + 1] === '"') {
+							field += '"';
+							i += 2;
+						} else {
+							i++; // skip closing quote
+							break;
+						}
+					} else {
+						field += src[i];
+						i++;
+					}
+				}
+				row.push(field);
+			} else {
+				// Unquoted field
+				let field = '';
+				while (i < src.length && src[i] !== ',' && src[i] !== '\n') {
+					field += src[i];
+					i++;
+				}
+				row.push(field.trim());
+			}
+
+			if (i < src.length && src[i] === ',') {
+				i++; // skip comma
+			} else {
+				break;
+			}
+		}
+		if (i < src.length && src[i] === '\n') i++; // skip newline
+		lines.push(row);
+	}
+
+	const headers = lines[0] ?? [];
+	const rows = lines.slice(1);
+	return { headers, rows };
+}
+
+export function inferColumnTypes(headers: string[], rows: string[][]): ColumnDef[] {
+	return headers.map((rawName, colIdx) => {
+		const name = rawName.trim() || `col_${colIdx}`;
+		const values = rows.map(r => (colIdx < r.length ? r[colIdx] : ''));
+		const nonEmpty = values.filter(v => v !== '');
+		const nullable = nonEmpty.length < values.length;
+
+		if (nonEmpty.length === 0) {
+			return { name, type: { VarChar: 32 } as { VarChar: number }, nullable: true };
+		}
+
+		// Bool check
+		const boolSet = new Set(['true', 'false', '0', '1']);
+		if (nonEmpty.every(v => boolSet.has(v.toLowerCase()))) {
+			return { name, type: 'Bool', nullable };
+		}
+
+		// UInt32 check
+		const uintRe = /^\d+$/;
+		if (nonEmpty.every(v => uintRe.test(v))) {
+			const nums = nonEmpty.map(Number);
+			if (nums.every(n => n >= 0 && n <= 4294967295)) {
+				return { name, type: 'UInt32', nullable };
+			}
+		}
+
+		// Int32 check
+		const intRe = /^-?\d+$/;
+		if (nonEmpty.every(v => intRe.test(v))) {
+			const nums = nonEmpty.map(Number);
+			if (nums.every(n => n >= -2147483648 && n <= 2147483647)) {
+				return { name, type: 'Int32', nullable };
+			}
+		}
+
+		// Float64 check
+		const floatRe = /^-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+		if (nonEmpty.every(v => floatRe.test(v))) {
+			return { name, type: 'Float64', nullable };
+		}
+
+		// VarChar fallback
+		const maxLen = Math.max(...nonEmpty.map(v => v.length));
+		const rounded = maxLen <= 32 ? 32 : maxLen <= 64 ? 64 : maxLen <= 128 ? 128 : 255;
+		return { name, type: { VarChar: rounded } as { VarChar: number }, nullable };
+	});
+}

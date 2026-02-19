@@ -2,7 +2,7 @@
 	import { storageState } from '$lib/stores/storage.svelte.js';
 	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	import type { EngineConfig, ColumnDef } from '$lib/wasm/storage-types.js';
-	import { formatBytes } from '$lib/wasm/storage-types.js';
+	import { formatBytes, parseCSV, inferColumnTypes } from '$lib/wasm/storage-types.js';
 
 	// ── Engine config form ──
 	let pageSize = $state(128);
@@ -29,6 +29,15 @@
 	let qfRowCount = $state(100);
 	const ROW_PRESETS = [10, 50, 100, 500];
 
+	// ── Load Data form ──
+	let ldTableName = $state('');
+	let ldHeaders: string[] = $state([]);
+	let ldRows: string[][] = $state([]);
+	let ldColumns: ColumnDef[] = $state([]);
+	let ldParsed = $state(false);
+	let ldError = $state('');
+	let loadDataOpen = $state(true);
+
 	// ── Insert form ──
 	let insertValues = $state('');
 
@@ -52,6 +61,7 @@
 		if (storageState.tables.length > 0 && !hasAutoCollapsed) {
 			quickFillOpen = false;
 			createTableOpen = false;
+			loadDataOpen = false;
 			hasAutoCollapsed = true;
 		}
 	});
@@ -111,6 +121,51 @@
 			return { name: c.name, type: type_, nullable: c.nullable };
 		});
 		storageState.bootstrapTable(qfTableName.trim(), columns, qfRowCount);
+	}
+
+	function handleFileSelect(event: Event) {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+
+		ldError = '';
+		ldParsed = false;
+
+		const reader = new FileReader();
+		reader.onload = () => {
+			try {
+				const text = reader.result as string;
+				const { headers, rows } = parseCSV(text);
+				if (headers.length === 0) {
+					ldError = 'No columns found in CSV';
+					return;
+				}
+				ldHeaders = headers;
+				ldRows = rows;
+				ldColumns = inferColumnTypes(headers, rows);
+				ldParsed = true;
+
+				// Auto-fill table name from filename
+				if (!ldTableName.trim()) {
+					ldTableName = file.name.replace(/\.csv$/i, '').replace(/[^a-zA-Z0-9_]/g, '_');
+				}
+			} catch (e) {
+				ldError = String(e);
+			}
+		};
+		reader.readAsText(file);
+	}
+
+	function doLoadData() {
+		if (!ldTableName.trim() || !ldParsed) return;
+		storageState.loadFromCSV(ldTableName.trim(), ldHeaders, ldRows, ldColumns);
+		// Reset form
+		ldTableName = '';
+		ldHeaders = [];
+		ldRows = [];
+		ldColumns = [];
+		ldParsed = false;
+		ldError = '';
 	}
 
 	function createTable() {
@@ -284,6 +339,45 @@
 			</div>
 
 			<button class="btn primary" onclick={doQuickFill} disabled={!qfTableName.trim()}>Create &amp; Fill</button>
+		</CollapsibleSection>
+
+		<!-- Load Data -->
+		<CollapsibleSection
+			title="Load Data"
+			bind:open={loadDataOpen}
+			description="Upload a CSV file to create a table with auto-inferred column types"
+		>
+			<input type="text" bind:value={ldTableName} placeholder="Table name" class="text-input" />
+			<div class="file-picker">
+				<input
+					type="file"
+					accept=".csv"
+					class="file-input-hidden"
+					onchange={handleFileSelect}
+					id="csv-file-input"
+				/>
+				<label for="csv-file-input" class="btn small">Choose CSV File...</label>
+			</div>
+
+			{#if ldError}
+				<span class="hint" style="color: #f87171;">{ldError}</span>
+			{/if}
+
+			{#if ldParsed}
+				<span class="hint">{ldRows.length} rows, {ldColumns.length} columns</span>
+				<div class="schema-pills">
+					{#each ldColumns as col}
+						<span class="schema-pill">
+							{col.name}: {formatColType(col.type)}{col.nullable ? '?' : ''}
+						</span>
+					{/each}
+				</div>
+				<button
+					class="btn primary"
+					onclick={doLoadData}
+					disabled={!ldTableName.trim()}
+				>Load {ldRows.length} Rows</button>
+			{/if}
 		</CollapsibleSection>
 
 		<!-- Create Table -->
@@ -923,6 +1017,18 @@
 	.cell-info-details strong {
 		color: rgba(255, 255, 255, 0.8);
 		font-weight: 600;
+	}
+
+	.file-picker {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.file-input-hidden {
+		display: none;
+	}
+	.file-picker label {
+		cursor: pointer;
 	}
 
 	.status {

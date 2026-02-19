@@ -8,7 +8,7 @@ import type {
 	ColumnDef,
 	ScanRow,
 } from '$lib/wasm/storage-types.js';
-import { formatBytes } from '$lib/wasm/storage-types.js';
+import { formatBytes, parseCSV, inferColumnTypes } from '$lib/wasm/storage-types.js';
 
 // ── Reactive state using Svelte 5 runes ────────────────────────────
 
@@ -89,6 +89,20 @@ function randomValue(colType: string | { VarChar: number } | { Blob: number }, n
 		case 'Float64': return Math.round(Math.random() * 10000) / 100;
 		case 'Bool':   return Math.random() > 0.5;
 		default:       return 0;
+	}
+}
+
+function coerceValue(raw: string, colType: string | { VarChar: number } | { Blob: number }): unknown {
+	if (raw === '') return null;
+	if (typeof colType === 'object') return raw; // VarChar / Blob → string as-is
+	switch (colType) {
+		case 'Int32': case 'UInt32': return parseInt(raw, 10);
+		case 'Float64': return parseFloat(raw);
+		case 'Bool': {
+			const lower = raw.toLowerCase();
+			return lower === 'true' || lower === '1';
+		}
+		default: return raw;
 	}
 }
 
@@ -368,5 +382,29 @@ export const storageState = {
 		}
 	},
 
+	loadFromCSV(tableName: string, headers: string[], rows: string[][], columns: ColumnDef[]) {
+		if (!engine) return;
+		try {
+			engine.createTable(tableName, columns);
+			tables = engine.listTables();
+			if (!selectedTable) selectedTable = tableName;
+
+			for (const row of rows) {
+				const values = columns.map((col, i) => {
+					const raw = i < row.length ? row[i] : '';
+					return raw === '' && col.nullable ? null : coerceValue(raw, col.type);
+				});
+				engine.insert(tableName, values);
+			}
+
+			refreshSnapshots();
+			setStatus(`Loaded '${tableName}' with ${rows.length} rows from CSV`, 'success');
+		} catch (e: unknown) {
+			setStatus(String(e), 'error');
+		}
+	},
+
+	parseCSV,
+	inferColumnTypes,
 	refreshSnapshots,
 };
