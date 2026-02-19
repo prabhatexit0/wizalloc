@@ -89,53 +89,34 @@
 	</div>
 {:else}
 	<div class="layout">
-		{#if layoutState.sidebarCollapsed}
-			<aside class="sidebar collapsed">
-				<PaneHeader title="Controls" collapsed={true} onToggle={layoutState.toggleSidebar} vertical={true} />
-			</aside>
-		{:else}
-			<aside class="sidebar">
-				<PaneHeader title="Controls" collapsed={false} onToggle={layoutState.toggleSidebar} />
-				<div class="sidebar-content">
-					<StorageControlPanel />
-				</div>
-			</aside>
-		{/if}
-		<div class="visualizations" bind:this={vizContainer}>
-			<div class="viz-row top" bind:this={topRowEl} style="flex:{topRowFlex}">
-				{#if layoutState.bufferPoolCollapsed}
-					<div class="viz-panel collapsed-h">
-						<PaneHeader title="Buffer Pool" collapsed={true} onToggle={layoutState.toggleBufferPool} vertical={true} />
+		{#if isMobile}
+			<!-- Mobile: all panes stacked vertically with collapsible headers -->
+			<aside class="sidebar" class:collapsed={layoutState.sidebarCollapsed}>
+				<PaneHeader title="Controls" collapsed={layoutState.sidebarCollapsed} onToggle={layoutState.toggleSidebar} />
+				{#if !layoutState.sidebarCollapsed}
+					<div class="sidebar-content">
+						<StorageControlPanel />
 					</div>
-				{:else}
-					<div class="viz-panel" style="flex:{bpFlex}">
-						<PaneHeader title="Buffer Pool" collapsed={false} onToggle={layoutState.toggleBufferPool} />
+				{/if}
+			</aside>
+			<div class="visualizations mobile-viz" bind:this={vizContainer}>
+				<div class="mobile-pane" class:collapsed={layoutState.bufferPoolCollapsed}>
+					<PaneHeader title="Buffer Pool" collapsed={layoutState.bufferPoolCollapsed} onToggle={layoutState.toggleBufferPool} />
+					{#if !layoutState.bufferPoolCollapsed}
 						<div class="pane-content">
 							<BufferPoolCanvas />
 						</div>
-					</div>
-				{/if}
-				{#if !isMobile && !layoutState.bufferPoolCollapsed && !layoutState.diskCollapsed}
-					<PaneDivider orientation="vertical" onResize={handleVerticalResize} />
-				{/if}
-				{#if layoutState.diskCollapsed}
-					<div class="viz-panel collapsed-h">
-						<PaneHeader title="Disk" collapsed={true} onToggle={layoutState.toggleDisk} vertical={true} />
-					</div>
-				{:else}
-					<div class="viz-panel" style="flex:{diskFlex}">
-						<PaneHeader title="Disk" collapsed={false} onToggle={layoutState.toggleDisk} />
+					{/if}
+				</div>
+				<div class="mobile-pane" class:collapsed={layoutState.diskCollapsed}>
+					<PaneHeader title="Disk" collapsed={layoutState.diskCollapsed} onToggle={layoutState.toggleDisk} />
+					{#if !layoutState.diskCollapsed}
 						<div class="pane-content">
 							<DiskCanvas />
 						</div>
-					</div>
-				{/if}
-			</div>
-			{#if !isMobile && !layoutState.inspectorCollapsed}
-				<PaneDivider orientation="horizontal" onResize={handleHorizontalResize} />
-			{/if}
-			<div class="viz-row bottom" style="flex:{bottomRowFlex}">
-				<div class="viz-panel wide">
+					{/if}
+				</div>
+				<div class="mobile-pane" class:collapsed={layoutState.inspectorCollapsed}>
 					<PaneHeader title="Page Inspector" collapsed={layoutState.inspectorCollapsed} onToggle={layoutState.toggleInspector} />
 					{#if !layoutState.inspectorCollapsed}
 						<div class="pane-content">
@@ -144,7 +125,65 @@
 					{/if}
 				</div>
 			</div>
-		</div>
+		{:else}
+			<!-- Desktop: resizable split panes -->
+			{#if layoutState.sidebarCollapsed}
+				<aside class="sidebar collapsed">
+					<PaneHeader title="Controls" collapsed={true} onToggle={layoutState.toggleSidebar} vertical={true} />
+				</aside>
+			{:else}
+				<aside class="sidebar">
+					<PaneHeader title="Controls" collapsed={false} onToggle={layoutState.toggleSidebar} />
+					<div class="sidebar-content">
+						<StorageControlPanel />
+					</div>
+				</aside>
+			{/if}
+			<div class="visualizations" bind:this={vizContainer}>
+				<div class="viz-row top" bind:this={topRowEl} style="flex:{topRowFlex}">
+					{#if layoutState.bufferPoolCollapsed}
+						<div class="viz-panel collapsed-h">
+							<PaneHeader title="Buffer Pool" collapsed={true} onToggle={layoutState.toggleBufferPool} vertical={true} />
+						</div>
+					{:else}
+						<div class="viz-panel" style="flex:{bpFlex}">
+							<PaneHeader title="Buffer Pool" collapsed={false} onToggle={layoutState.toggleBufferPool} />
+							<div class="pane-content">
+								<BufferPoolCanvas />
+							</div>
+						</div>
+					{/if}
+					{#if !layoutState.bufferPoolCollapsed && !layoutState.diskCollapsed}
+						<PaneDivider orientation="vertical" onResize={handleVerticalResize} />
+					{/if}
+					{#if layoutState.diskCollapsed}
+						<div class="viz-panel collapsed-h">
+							<PaneHeader title="Disk" collapsed={true} onToggle={layoutState.toggleDisk} vertical={true} />
+						</div>
+					{:else}
+						<div class="viz-panel" style="flex:{diskFlex}">
+							<PaneHeader title="Disk" collapsed={false} onToggle={layoutState.toggleDisk} />
+							<div class="pane-content">
+								<DiskCanvas />
+							</div>
+						</div>
+					{/if}
+				</div>
+				{#if !layoutState.inspectorCollapsed}
+					<PaneDivider orientation="horizontal" onResize={handleHorizontalResize} />
+				{/if}
+				<div class="viz-row bottom" style="flex:{bottomRowFlex}">
+					<div class="viz-panel wide">
+						<PaneHeader title="Page Inspector" collapsed={layoutState.inspectorCollapsed} onToggle={layoutState.toggleInspector} />
+						{#if !layoutState.inspectorCollapsed}
+							<div class="pane-content">
+								<PageInspectorCanvas />
+							</div>
+						{/if}
+					</div>
+				</div>
+			</div>
+		{/if}
 	</div>
 {/if}
 
@@ -226,6 +265,25 @@
 		min-width: 0;
 	}
 
+	/* Mobile: vertically stacked collapsible panes */
+	.mobile-viz {
+		flex-direction: column;
+	}
+	.mobile-pane {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+	}
+	.mobile-pane:not(.collapsed) {
+		flex: 1 1 0%;
+		min-height: 120px;
+	}
+	.mobile-pane.collapsed {
+		flex: 0 0 auto;
+	}
+
 	@media (max-width: 768px) {
 		.layout {
 			flex-direction: column;
@@ -234,19 +292,16 @@
 			width: 100% !important;
 			max-width: none !important;
 			min-width: 0 !important;
-			max-height: 40vh;
 			border-right: none;
 			border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+			flex-shrink: 0;
+		}
+		.sidebar:not(.collapsed) {
+			max-height: 40vh;
 		}
 		.sidebar.collapsed {
 			max-height: none;
-		}
-		.viz-row.top {
 			flex-direction: column;
-		}
-		.viz-panel {
-			flex: 1 1 0% !important;
-			min-height: 150px;
 		}
 	}
 </style>
