@@ -5,6 +5,7 @@ wasm-engine/target/
 frontend/node_modules/
 frontend/.svelte-kit/
 frontend/build/
+frontend/dist/
 
 # OS
 .DS_Store
