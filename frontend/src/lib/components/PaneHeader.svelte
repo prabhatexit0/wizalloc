@@ -15,37 +15,36 @@
 		<span class="pane-title-v">{title}</span>
 	</button>
 {:else}
-	<div class="pane-header">
-		<button class="collapse-btn" onclick={onToggle}>
+	<button class="pane-header" onclick={onToggle}>
+		<span class="chevron">
 			{collapsed ? '▶' : '▼'}
-		</button>
+		</span>
 		<span class="pane-title">{title}</span>
-	</div>
+	</button>
 {/if}
 
 <style>
 	.pane-header {
 		height: 24px;
+		width: 100%;
 		display: flex;
 		align-items: center;
 		gap: 4px;
 		padding: 0 8px;
 		background: rgba(255, 255, 255, 0.03);
+		border: none;
 		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 		flex-shrink: 0;
 		user-select: none;
-	}
-	.collapse-btn {
-		background: none;
-		border: none;
-		color: rgba(255, 255, 255, 0.4);
 		cursor: pointer;
-		font-size: 8px;
-		padding: 0 2px;
-		line-height: 1;
 	}
-	.collapse-btn:hover {
-		color: rgba(255, 255, 255, 0.7);
+	.pane-header:hover {
+		background: rgba(255, 255, 255, 0.06);
+	}
+	.chevron {
+		color: rgba(255, 255, 255, 0.4);
+		font-size: 8px;
+		line-height: 1;
 	}
 	.pane-title {
 		font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
